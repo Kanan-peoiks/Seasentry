@@ -141,46 +141,6 @@ export function estimateSpillSource(
   };
 }
 
-const METERS_PER_DEG_LAT = 111_320;
-
-/**
- * Deterministic jagged polygon approximating a real slick outline instead of
- * a plain circle — same equivalent-circle radius as the reported area, with
- * per-vertex seeded noise and a mild elongation along the downwind bearing.
- */
-export function generateSlickPolygon(
-  lat: number,
-  lng: number,
-  areaM2: number,
-  seed: string,
-  downwindBearingDeg?: number
-): [number, number][] {
-  const baseRadiusM = Math.sqrt(areaM2 / Math.PI) * 3.2;
-  const vertexCount = 16;
-  const latRad = (lat * Math.PI) / 180;
-  const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos(latRad);
-  const points: [number, number][] = [];
-
-  for (let i = 0; i < vertexCount; i++) {
-    const angleDeg = (360 / vertexCount) * i;
-    const noise = (hashString(`${seed}-v${i}`) % 100) / 100;
-    let radiusM = baseRadiusM * (0.62 + noise * 0.68);
-
-    if (downwindBearingDeg !== undefined) {
-      const diff = Math.abs(((angleDeg - downwindBearingDeg + 540) % 360) - 180);
-      const elongation = 1 + Math.max(0, (1 - diff / 90)) * 0.55;
-      radiusM *= elongation;
-    }
-
-    const angleRad = (angleDeg * Math.PI) / 180;
-    const dLat = (radiusM * Math.cos(angleRad)) / METERS_PER_DEG_LAT;
-    const dLng = (radiusM * Math.sin(angleRad)) / metersPerDegLng;
-    points.push([lat + dLat, lng + dLng]);
-  }
-
-  return points;
-}
-
 // ------------------------------------------------------------------
 // Response materials — built on the operational sorbent ratio.
 // ------------------------------------------------------------------

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
-import MapPanel from "@/components/MapPanel";
+import MapPanel, { DEFAULT_MAP_LAYERS, type MapHandle } from "@/components/MapPanel";
 import KpiCards from "@/components/KpiCards";
 import RecentIncidents from "@/components/RecentIncidents";
 import ActivityFeed from "@/components/ActivityFeed";
@@ -31,7 +31,7 @@ function DashboardContent() {
   const router = useRouter();
   const { t } = useLanguage();
   const { incidents, vessels, riskZones, activity, kpis, hasLiveIncident, ingestIncident } = useIncidentStore();
-  const [activeMapCoords, setActiveMapCoords] = useState<[number, number] | null>(null);
+  const mapRef = useRef<MapHandle>(null);
   const [selected, setSelected] = useState<Incident | null>(null);
   const [interactionMode, setInteractionMode] = useState<"none" | "report" | "scan">("none");
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -273,9 +273,12 @@ function DashboardContent() {
               incidents={incidents}
               vessels={mapVessels}
               riskZones={riskZones}
-              activeMapCoords={activeMapCoords}
+              ref={mapRef}
+              layers={DEFAULT_MAP_LAYERS}
+              label={t.mapPanel.title}
+              onPlacementCancel={() => setInteractionMode("none")}
               liveIncidentId={hasLiveIncident ? LIVE_INCIDENT_ID : null}
-              focusedIncidentId={selected?.id ?? null}
+              selectedId={selected?.id ?? null}
               sourceEstimates={sourceEstimates}
               onIncidentSelect={handleIncidentSelect}
               placementMode={interactionMode !== "none"}
@@ -334,7 +337,7 @@ function DashboardContent() {
           <RecentIncidents incidents={incidents} />
           <ActivityFeed
             entries={activity}
-            onEventClick={(lat, lng) => setActiveMapCoords([lat, lng])}
+            onEventClick={(lat, lng) => mapRef.current?.flyTo(lat, lng, 10)}
           />
         </section>
       </div>

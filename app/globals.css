@@ -253,108 +253,44 @@ html, body {
   border: 1px solid var(--glass-border);
 }
 
-/* ── Leaflet ── */
-.leaflet-container {
-  background: var(--bg-base) !important;
-  font-family: inherit;
-}
-/* The basemap tiles (OpenStreetMap) are always light regardless of app
-   theme, so the popup card floating over them stays light too — its text
-   is deliberately a fixed dark color here, NOT var(--text-primary), which
-   would flip to near-white in dark mode and become illegible on this
-   always-light card. */
-.leaflet-popup-content-wrapper {
-  background: rgba(255, 255, 255, 0.97) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid #E6E2DA !important;
-  border-radius: 8px !important;
-  box-shadow: 0 12px 32px rgba(43, 45, 66, 0.16) !important;
-  color: #2B2D42 !important;
-}
-.leaflet-popup-tip { background: rgba(255, 255, 255, 0.97) !important; }
-.leaflet-popup-content { margin: 0 !important; }
-.leaflet-popup-close-button {
-  color: #6C757D !important;
-  top: 10px !important;
-  right: 12px !important;
-  font-size: 18px !important;
-}
-.leaflet-popup-close-button:hover { color: #2B2D42 !important; }
-.leaflet-bar {
-  border: 1px solid var(--glass-border) !important;
-  border-radius: 6px !important;
-  box-shadow: 0 4px 12px rgba(43, 45, 66, 0.12) !important;
-  overflow: hidden;
-}
-.leaflet-bar a {
-  background: var(--glass-bg) !important;
-  backdrop-filter: blur(8px) !important;
-  border-bottom: 1px solid var(--glass-border) !important;
-  color: var(--text-secondary) !important;
-  width: 30px !important;
-  height: 30px !important;
-  line-height: 30px !important;
-}
-.leaflet-bar a:hover {
-  background: var(--glass-bg-hover) !important;
-  color: var(--text-primary) !important;
-}
-.leaflet-bar a:last-child { border-bottom: none !important; }
-.leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.75) !important;
-  color: var(--text-secondary) !important;
-  font-size: 9px !important;
-}
-.leaflet-control-attribution a { color: var(--accent) !important; }
-
-/* Incident popup CTA */
-.popup-view-btn {
-  display: block;
-  width: 100%;
-  margin-top: 12px;
-  padding: 8px 12px;
-  background: var(--accent-soft);
-  border: 1px solid rgba(129, 178, 154, 0.35);
-  border-radius: 6px;
-  color: var(--accent);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-align: center;
-  cursor: pointer;
-  font-family: inherit;
-  text-transform: uppercase;
-}
-.popup-view-btn:hover {
-  background: rgba(129, 178, 154, 0.2);
-}
+/* ── Map ── */
+.map-panel { position: relative; width: 100%; height: 100%; min-height: inherit; }
+.map-canvas { position: absolute; inset: 0; }
+.leaflet-container { background: #DCE7EC !important; font-family: inherit; }
+.leaflet-container:focus-visible { outline-offset: -3px; }
+.map-placing, .map-placing .leaflet-interactive { cursor: crosshair !important; }
+.leaflet-control-attribution { background: rgba(255,255,255,.85) !important; color: #3E5363 !important; font-size: 11px !important; }
+.leaflet-control-attribution a { color: #0B6E69 !important; }
+/* Tooltips sit on the always-light basemap, so they keep fixed light colours. */
+.leaflet-tooltip { padding: 8px 10px; border: 1px solid #D6E2E8; border-radius: 8px; background: #FFFFFF; color: #163147; font-size: 12px; line-height: 1.45; box-shadow: 0 6px 18px rgba(12, 33, 51, .16); }
+.leaflet-tooltip strong { font-weight: 600; }
+.map-marker-wrap { display: flex !important; align-items: center; justify-content: center; background: none; border: 0; }
+.map-marker-wrap:focus-visible { outline: none !important; }
+.map-marker-wrap:focus-visible .map-marker { outline: 3px solid #0C2133; outline-offset: 3px; }
+.map-marker { position: relative; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--marker-color); border: 2px solid #FFFFFF; box-shadow: 0 1px 4px rgba(12, 33, 51, .45); transition: width .15s, height .15s; }
+.map-marker::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--marker-color); }
+.map-marker-dot { width: 30%; height: 30%; border-radius: 50%; background: #FFFFFF; opacity: 0; }
+.map-marker--detected::after { animation: markerRing 2.2s ease-out infinite; }
+.map-marker--under_review::after { border-style: solid; }
+.map-marker--cleaning::after { border-style: dashed; }
+.map-marker--resolved, .map-marker--rejected { background: #FFFFFF; border-color: var(--marker-color); box-shadow: none; }
+.map-marker--resolved::after, .map-marker--rejected::after { display: none; }
+.map-marker--rejected { border-style: dashed; }
+.map-marker--resolved .map-marker-dot { opacity: 1; background: var(--marker-color); }
+.map-marker--selected { border-color: #0C2133; border-width: 3px; }
+.map-marker--selected::after { inset: -8px; border: 3px solid #0C2133; animation: none; }
+.map-marker--live .map-marker-dot { opacity: 1; border-radius: 1px; transform: rotate(45deg); }
+.map-vessel { display: block; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 12px solid #0B6E69; filter: drop-shadow(0 1px 1px rgba(12, 33, 51, .35)); }
+.map-source { display: block; width: 14px; height: 14px; border: 2px dashed #7A3E9D; border-radius: 50%; background: rgba(255,255,255,.85); }
+.map-overlay { position: absolute; inset: 0; z-index: 900; display: flex; align-items: center; justify-content: center; gap: 10px; background: var(--bg-elevated); color: var(--text-secondary); font-size: 14px; }
+.map-banner { position: absolute; z-index: 900; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; max-width: calc(100% - 24px); padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; box-shadow: 0 6px 18px rgba(12, 33, 51, .18); }
+.map-banner--hint { top: 12px; background: #0C2133; color: #EAF4F8; pointer-events: none; }
+.map-banner--error { bottom: 32px; background: #FFFFFF; color: #8E2D2B; border: 1px solid #F0C5C2; }
+.map-banner--error button { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 10px; border: 1px solid #E5B6B3; border-radius: 6px; background: #FFFFFF; color: inherit; font-weight: 600; cursor: pointer; }
+@keyframes markerRing { 0% { transform: scale(.85); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
 
 /* ── Animations (restrained) ── */
-@keyframes livePulse {
-  0%   { box-shadow: 0 0 0 0 rgba(168, 218, 220, 0.65); opacity: 1; }
-  60%  { box-shadow: 0 0 0 6px rgba(168, 218, 220, 0); opacity: 0.9; }
-  100% { box-shadow: 0 0 0 0 rgba(168, 218, 220, 0); opacity: 1; }
-}
-@keyframes statusBlink {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.45; }
-}
-.system-status-blink {
-  animation: statusBlink 1s ease-in-out infinite;
-}
-@keyframes markerPulse {
-  0%  { box-shadow: 0 0 0 0 rgba(224, 122, 95, 0.45); }
-  70% { box-shadow: 0 0 0 10px rgba(224, 122, 95, 0); }
-  100%{ box-shadow: 0 0 0 0 rgba(224, 122, 95, 0); }
-}
-@keyframes markerRing {
-  0%  { transform: translate(-50%, -50%) scale(1); opacity: 0.45; }
-  100%{ transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
-}
 @keyframes spin { to { transform: rotate(360deg); } }
-
-.live-dot { animation: livePulse 2.2s ease-in-out infinite; }
 .spinner  { animation: spin 0.8s linear infinite; }
 
 /* ── Status pills ── */

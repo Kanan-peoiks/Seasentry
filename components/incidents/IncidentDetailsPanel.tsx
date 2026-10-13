@@ -60,6 +60,7 @@ import {
   TrendingUp,
   PieChart as PieChartIcon,
   Scale,
+  X,
 } from "lucide-react";
 
 /** Confidence sub-scores + processing pipeline, shown only in the expanded
@@ -377,6 +378,8 @@ type Props = {
    * drift analysis, method comparison) — only reached by actually
    * navigating to the AI Analysis page. */
   context?: "incident" | "ai";
+  /** "dialog" (default) opens a modal; "docked" renders inline, e.g. in the dashboard rail. */
+  presentation?: "dialog" | "docked";
 };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -637,7 +640,7 @@ const actionBtnStyle = (variant: "primary" | "danger" | "neutral" | "warn"): Rea
   };
 };
 
-export default function IncidentDetailsPanel({ incident, onClose, expanded, context = "incident" }: Props) {
+export default function IncidentDetailsPanel({ incident, onClose, expanded, context = "incident", presentation = "dialog" }: Props) {
   const router = useRouter();
   const { t } = useLanguage();
   const { incidents: allIncidents, applyHumanAction, getIncidentById } = useIncidentStore();
@@ -681,16 +684,8 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
     }
   };
 
-  return (
-    <DetailPanel
-      open={!!live}
-      title={live ? t.incidentDetail.incidentNumber(live.displayId) : ""}
-      subtitle={live?.title || live?.location}
-      onClose={onClose}
-      width={expanded ? "min(1100px, 96vw)" : 480}
-      variant={expanded ? "full" : "side"}
-    >
-      {live &&
+  const title = live ? t.incidentDetail.incidentNumber(live.displayId) : "";
+  const body = live &&
         (() => {
           const impact = deriveAiImpact(live, wind);
           const materials = deriveResponseMaterials(live, impact.volumeBbl);
@@ -1287,7 +1282,34 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
               )}
             </>
           );
-        })()}
+        })();
+
+  if (presentation === "docked") {
+    if (!live) return null;
+    return (
+      <section className="incident-dock" aria-labelledby="incident-dock-title">
+        <header className="incident-dock-header">
+          <div className="incident-dock-heading">
+            <h2 id="incident-dock-title">{title}</h2>
+            <p>{live.title || live.location}</p>
+          </div>
+          <button type="button" className="ui-icon-button" onClick={onClose} aria-label={t.common.close}><X size={18} aria-hidden="true" /></button>
+        </header>
+        <div className="incident-dock-body">{body}</div>
+      </section>
+    );
+  }
+
+  return (
+    <DetailPanel
+      open={!!live}
+      title={title}
+      subtitle={live?.title || live?.location}
+      onClose={onClose}
+      width={expanded ? "min(1100px, 96vw)" : 480}
+      variant={expanded ? "full" : "side"}
+    >
+      {body}
     </DetailPanel>
   );
 }

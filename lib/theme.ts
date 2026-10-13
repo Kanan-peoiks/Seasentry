@@ -8,13 +8,16 @@
 // ============================================================
 
 export type Theme = "light" | "dark";
+export const THEME_CHANGE_EVENT = "seasentry-theme-change";
 
 const THEME_STORAGE_KEY = "seasentry-theme";
 
 export function getStoredTheme(): Theme | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(THEME_STORAGE_KEY);
-  return raw === "light" || raw === "dark" ? raw : null;
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    return raw === "light" || raw === "dark" ? raw : null;
+  } catch { return null; }
 }
 
 export function getEffectiveTheme(): Theme {
@@ -33,8 +36,9 @@ export function applyTheme(theme: Theme): void {
 
 export function setTheme(theme: Theme): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try { localStorage.setItem(THEME_STORAGE_KEY, theme); } catch { /* Session preference still works when storage is unavailable. */ }
   applyTheme(theme);
+  window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
 }
 
 export function toggleTheme(): Theme {

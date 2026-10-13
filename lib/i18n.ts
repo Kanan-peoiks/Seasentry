@@ -17,8 +17,10 @@ const LANGUAGE_CHANGE_EVENT = "seasentry-language-change";
 
 export function getStoredLanguage(): Language | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(LANGUAGE_STORAGE_KEY);
-  return raw === "en" || raw === "az" ? raw : null;
+  try {
+    const raw = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return raw === "en" || raw === "az" ? raw : null;
+  } catch { return null; }
 }
 
 export function getEffectiveLanguage(): Language {
@@ -27,7 +29,8 @@ export function getEffectiveLanguage(): Language {
 
 export function setLanguage(lang: Language): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(LANGUAGE_STORAGE_KEY, lang);
+  try { localStorage.setItem(LANGUAGE_STORAGE_KEY, lang); } catch { /* Keep the current page usable when browser storage is blocked. */ }
+  document.documentElement.lang = lang;
   window.dispatchEvent(new Event(LANGUAGE_CHANGE_EVENT));
 }
 
@@ -41,6 +44,14 @@ export { LANGUAGE_CHANGE_EVENT };
 
 export const translations = {
   en: {
+    session: {
+      checkingTitle: "Checking your session…",
+      checkingBody: "Securely connecting to your workspace.",
+      unavailableTitle: "The workspace is temporarily unavailable",
+      unavailableBody: "Your session is preserved. Try connecting again.",
+      retry: "Try again",
+      signOutError: "Could not sign out. Please try again.",
+    },
     nav: { about: "About", login: "Login", register: "Register" },
     landing: {
       eyebrow: "Caspian Sea · Azerbaijan",
@@ -68,7 +79,7 @@ export const translations = {
         },
         response: {
           title: "Response & cleanup",
-          body: "Sorbent, boom, and vessel requirements are calculated from real spill physics, not guesswork.",
+          body: "Estimate sorbent, boom, and vessel requirements with a transparent response plan.",
         },
       },
       howItWorksTitle: "How it works",
@@ -90,6 +101,21 @@ export const translations = {
       footerTag: "Caspian Sea oil-spill intelligence platform.",
     },
     auth: {
+      captchaUnavailable: "Verification could not load. Check your connection and retry.",
+      captchaRetry: "Retry verification",
+      signingIn: "Signing in…",
+      registering: "Creating account…",
+      verifying: "Verifying…",
+      emailRequired: "Enter your email.",
+      invalidEmail: "Enter a valid email address.",
+      passwordRequired: "Enter your password.",
+      passwordTooShort: "Use at least 8 characters.",
+      fullNameRequired: "Enter your name.",
+      serverUnavailable: "Could not reach the service. Please try again.",
+      invalidCredentials: "Email or password is incorrect.",
+      createAccountFailed: "Could not create your account. Please try again.",
+      demoFailed: "Could not start the demo. Please try again.",
+      invalidCode: "Enter a valid 6-digit code.",
       backToHome: "Back to home",
       signIn: "Sign in",
       createAccount: "Create your account",
@@ -149,6 +175,7 @@ export const translations = {
       demoDataNote: "Demo data · not live feeds",
     },
     common: {
+      refresh: "Refresh",
       noResultsFor: (q: string) => `No results for "${q}" — check the spelling or try a different search term.`,
       close: "Close",
       cancel: "Cancel",
@@ -163,6 +190,10 @@ export const translations = {
     },
     risk: { HIGH: "HIGH", MEDIUM: "MEDIUM", LOW: "LOW" },
     header: {
+      demoScenario: "Demo scenario",
+      demoActive: "Demo active",
+      clearDemo: "Clear demo",
+      closeNav: "Close navigation",
       tagline: "Satellite & AI Oil Spill Intelligence",
       toggleNav: "Toggle navigation",
       liveIncidentActive: "A live incident is active",
@@ -453,6 +484,10 @@ export const translations = {
       justNow: "just now",
     },
     seaWeather: {
+      noData: "Not available",
+      sourceTime: "Observation time",
+      partialUnavailable: "Some measurements are unavailable.",
+      refreshing: "Refreshing…",
       wind: "Wind",
       waves: "Waves",
       current: "Current",
@@ -702,6 +737,14 @@ export const translations = {
     },
   },
   az: {
+    session: {
+      checkingTitle: "Sessiya yoxlanılır…",
+      checkingBody: "İş sahəsinə təhlükəsiz qoşuluruq.",
+      unavailableTitle: "İş sahəsi müvəqqəti əlçatan deyil",
+      unavailableBody: "Sessiyanız saxlanılır. Yenidən qoşulmağa cəhd edin.",
+      retry: "Yenidən cəhd et",
+      signOutError: "Çıxış mümkün olmadı. Yenidən cəhd edin.",
+    },
     nav: { about: "Haqqında", login: "Giriş", register: "Qeydiyyat" },
     landing: {
       eyebrow: "Xəzər dənizi · Azərbaycan",
@@ -751,6 +794,21 @@ export const translations = {
       footerTag: "Xəzər dənizi neft sızması intellekt platforması.",
     },
     auth: {
+      captchaUnavailable: "Yoxlama yüklənmədi. Bağlantını yoxlayıb yenidən cəhd edin.",
+      captchaRetry: "Yoxlamanı yenilə",
+      signingIn: "Daxil olunur…",
+      registering: "Hesab yaradılır…",
+      verifying: "Yoxlanılır…",
+      emailRequired: "E-poçtunuzu yazın.",
+      invalidEmail: "Düzgün e-poçt ünvanı yazın.",
+      passwordRequired: "Şifrənizi yazın.",
+      passwordTooShort: "Ən azı 8 simvol istifadə edin.",
+      fullNameRequired: "Adınızı yazın.",
+      serverUnavailable: "Xidmətə qoşulmaq mümkün olmadı. Yenidən cəhd edin.",
+      invalidCredentials: "E-poçt və ya şifrə yanlışdır.",
+      createAccountFailed: "Hesab yaradıla bilmədi. Yenidən cəhd edin.",
+      demoFailed: "Demo başlatmaq mümkün olmadı. Yenidən cəhd edin.",
+      invalidCode: "Düzgün 6 rəqəmli kod yazın.",
       backToHome: "Ana səhifəyə qayıt",
       signIn: "Daxil ol",
       createAccount: "Hesab yaradın",
@@ -810,6 +868,7 @@ export const translations = {
       demoDataNote: "Demo data · canlı axın deyil",
     },
     common: {
+      refresh: "Yenilə",
       noResultsFor: (q: string) => `"${q}" üçün nəticə tapılmadı — yazılışı yoxlayın və ya fərqli axtarış sözü sınayın.`,
       close: "Bağla",
       cancel: "İmtina et",
@@ -824,6 +883,10 @@ export const translations = {
     },
     risk: { HIGH: "YÜKSƏK", MEDIUM: "ORTA", LOW: "AŞAĞI" },
     header: {
+      demoScenario: "Demo ssenarisi",
+      demoActive: "Demo aktivdir",
+      clearDemo: "Demonu bitir",
+      closeNav: "Naviqasiyanı bağla",
       tagline: "Peyk və AI ilə Neft Sızması İntellekti",
       toggleNav: "Naviqasiyanı aç/bağla",
       liveIncidentActive: "Canlı insident aktivdir",
@@ -1114,6 +1177,10 @@ export const translations = {
       justNow: "indicə",
     },
     seaWeather: {
+      noData: "Məlumat yoxdur",
+      sourceTime: "Müşahidə vaxtı",
+      partialUnavailable: "Bəzi ölçmələr əlçatan deyil.",
+      refreshing: "Yenilənir…",
       wind: "Külək",
       waves: "Dalğalar",
       current: "Axın",

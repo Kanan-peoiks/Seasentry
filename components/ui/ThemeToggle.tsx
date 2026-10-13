@@ -2,15 +2,27 @@
 
 import { useEffect, useState } from "react";
 import { Sun, Moon } from "lucide-react";
-import { getEffectiveTheme, toggleTheme, type Theme } from "@/lib/theme";
+import { getEffectiveTheme, toggleTheme, THEME_CHANGE_EVENT, type Theme } from "@/lib/theme";
+import { useLanguage } from "@/lib/useLanguage";
 
 export default function ThemeToggle({ size = 34 }: { size?: number }) {
   const [mounted, setMounted] = useState(false);
   const [theme, setThemeState] = useState<Theme>("light");
+  const { lang } = useLanguage();
 
   useEffect(() => {
     setMounted(true);
     setThemeState(getEffectiveTheme());
+    const sync = () => setThemeState(getEffectiveTheme());
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", sync);
+    window.addEventListener("storage", sync);
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    return () => {
+      media.removeEventListener("change", sync);
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(THEME_CHANGE_EVENT, sync);
+    };
   }, []);
 
   if (!mounted) {
@@ -20,8 +32,8 @@ export default function ThemeToggle({ size = 34 }: { size?: number }) {
   return (
     <button
       type="button"
-      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      aria-label="Toggle dark mode"
+      title={theme === "dark" ? (lang === "az" ? "Açıq görünüşə keç" : "Switch to light mode") : (lang === "az" ? "Tünd görünüşə keç" : "Switch to dark mode")}
+      aria-label={lang === "az" ? "Görünüşü dəyiş" : "Toggle color theme"}
       onClick={() => setThemeState(toggleTheme())}
       style={{
         width: size,

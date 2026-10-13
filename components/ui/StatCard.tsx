@@ -16,7 +16,7 @@ export default function StatCard({
   icon,
 }: Props) {
   return (
-    <div
+    <div className="stat-card"
       style={{
         background: "var(--bg-elevated)",
         border: "1px solid var(--glass-border)",
@@ -31,10 +31,9 @@ export default function StatCard({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span
           style={{
-            fontSize: 11,
+            fontSize: 13,
             fontWeight: 600,
-            letterSpacing: "0.07em",
-            textTransform: "uppercase",
+            letterSpacing: "0",
             color: "var(--text-secondary)",
           }}
         >
@@ -46,7 +45,7 @@ export default function StatCard({
               width: 30,
               height: 30,
               borderRadius: 8,
-              background: `${accent}18`,
+              background: `color-mix(in srgb, ${accent} 12%, transparent)`,
               color: accent,
               display: "flex",
               alignItems: "center",
@@ -71,7 +70,7 @@ export default function StatCard({
         {value}
       </div>
       {hint && (
-        <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{hint}</div>
+        <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{hint}</div>
       )}
     </div>
   );

@@ -32,12 +32,11 @@ export default function FilterBar({
     color: "var(--text-primary)",
     fontSize: 13,
     padding: "8px 12px",
-    outline: "none",
     fontFamily: "inherit",
   };
 
   return (
-    <div
+    <div className="filter-bar"
       style={{
         display: "flex",
         flexWrap: "wrap",
@@ -51,6 +50,7 @@ export default function FilterBar({
     >
       <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
         <Search
+          aria-hidden="true"
           size={14}
           style={{
             position: "absolute",
@@ -63,6 +63,9 @@ export default function FilterBar({
         />
         <input
           type="search"
+          name="search"
+          aria-label={searchPlaceholder}
+          autoComplete="off"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={searchPlaceholder}

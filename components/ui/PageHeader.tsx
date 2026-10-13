@@ -8,7 +8,7 @@ type Props = {
 
 export default function PageHeader({ title, subtitle, actions }: Props) {
   return (
-    <div
+    <header className="page-heading"
       style={{
         display: "flex",
         alignItems: "flex-start",
@@ -21,7 +21,7 @@ export default function PageHeader({ title, subtitle, actions }: Props) {
         <h1
           style={{
             margin: 0,
-            fontSize: 22,
+            fontSize: 28,
             fontWeight: 650,
             letterSpacing: "-0.01em",
             color: "var(--text-primary)",
@@ -33,7 +33,7 @@ export default function PageHeader({ title, subtitle, actions }: Props) {
           <p
             style={{
               margin: "6px 0 0",
-              fontSize: 13,
+              fontSize: 14,
               color: "var(--text-secondary)",
               maxWidth: 640,
               lineHeight: 1.45,
@@ -43,7 +43,7 @@ export default function PageHeader({ title, subtitle, actions }: Props) {
           </p>
         )}
       </div>
-      {actions && <div style={{ flexShrink: 0 }}>{actions}</div>}
-    </div>
+      {actions && <div className="page-heading-actions">{actions}</div>}
+    </header>
   );
 }

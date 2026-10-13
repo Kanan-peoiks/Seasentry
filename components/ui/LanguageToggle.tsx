@@ -1,27 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getEffectiveLanguage, toggleLanguage, type Language } from "@/lib/i18n";
+import { toggleLanguage } from "@/lib/i18n";
+import { useLanguage } from "@/lib/useLanguage";
 
 export default function LanguageToggle({ size = 34 }: { size?: number }) {
-  const [mounted, setMounted] = useState(false);
-  const [lang, setLangState] = useState<Language>("en");
-
-  useEffect(() => {
-    setMounted(true);
-    setLangState(getEffectiveLanguage());
-  }, []);
-
-  if (!mounted) {
-    return <span style={{ width: size, height: size, display: "inline-block" }} aria-hidden />;
-  }
+  const { lang } = useLanguage();
 
   return (
     <button
       type="button"
       title={lang === "en" ? "Azərbaycan dilinə keç" : "Switch to English"}
-      aria-label="Toggle language"
-      onClick={() => setLangState(toggleLanguage())}
+      aria-label={lang === "en" ? "Azərbaycan dilinə keç" : "Switch to English"}
+      onClick={() => toggleLanguage()}
       style={{
         width: size,
         height: size,

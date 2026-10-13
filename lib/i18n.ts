@@ -176,6 +176,7 @@ export const translations = {
     },
     common: {
       refresh: "Refresh",
+      skipToContent: "Skip to content",
       noResultsFor: (q: string) => `No results for "${q}" — check the spelling or try a different search term.`,
       close: "Close",
       cancel: "Cancel",
@@ -869,6 +870,7 @@ export const translations = {
     },
     common: {
       refresh: "Yenilə",
+      skipToContent: "Məzmuna keç",
       noResultsFor: (q: string) => `"${q}" üçün nəticə tapılmadı — yazılışı yoxlayın və ya fərqli axtarış sözü sınayın.`,
       close: "Bağla",
       cancel: "İmtina et",

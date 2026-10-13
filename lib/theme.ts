@@ -29,6 +29,19 @@ export function getEffectiveTheme(): Theme {
   return "light";
 }
 
+/** Subscribes to every source that can change the effective theme. */
+export function subscribeTheme(onChange: () => void): () => void {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  media.addEventListener("change", onChange);
+  window.addEventListener("storage", onChange);
+  window.addEventListener(THEME_CHANGE_EVENT, onChange);
+  return () => {
+    media.removeEventListener("change", onChange);
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+  };
+}
+
 export function applyTheme(theme: Theme): void {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", theme);

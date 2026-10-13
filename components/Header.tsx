@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { User, LogOut, Menu, CheckCircle2 } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import Link from "next/link";
+import { FlaskConical, LogOut, Menu, Waves, X } from "lucide-react";
 import { useIncidentStore } from "@/lib/incident-store";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/ui/LanguageToggle";
@@ -10,278 +11,82 @@ import { useLanguage } from "@/lib/useLanguage";
 type Props = {
   onLogout?: () => void;
   onMenuClick?: () => void;
+  menuExpanded?: boolean;
+  signingOut?: boolean;
   userName?: string;
   userRole?: string;
 };
 
+const bakuTime = () => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Baku", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date());
+function subscribeClock(onChange: () => void) {
+  const id = window.setInterval(onChange, 15_000);
+  return () => window.clearInterval(id);
+}
+
 function LiveClock() {
-  const [mounted, setMounted] = useState(false);
-  const [time, setTime] = useState("--:--");
+  const time = useSyncExternalStore(subscribeClock, bakuTime, () => null);
+  return <span className="workspace-clock" aria-label={time ? `${time} AZT` : undefined}>{time ?? "--:--"} AZT</span>;
+}
 
-  useEffect(() => {
-    setMounted(true);
-    const tick = () => {
-      const parts = new Intl.DateTimeFormat("en-GB", {
-        timeZone: "Asia/Baku",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).formatToParts(new Date());
-      const hh = parts.find((p) => p.type === "hour")?.value ?? "--";
-      const mm = parts.find((p) => p.type === "minute")?.value ?? "--";
-      setTime(`${hh}:${mm}`);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("") || "?";
+}
 
-  if (!mounted) {
-    return <span style={{ width: 52, display: "inline-block" }} aria-hidden />;
+/** The demo scenario is a client-only simulation. It is labelled as such and
+ * never presented as a service-health indicator. */
+function DemoScenarioControl() {
+  const { hasLiveIncident, simulateLiveIncident, resolveLiveIncident } = useIncidentStore();
+  const { t } = useLanguage();
+  if (hasLiveIncident) {
+    return (
+      <div className="demo-control demo-control--active" role="group" aria-label={t.header.demoScenario}>
+        <span className="demo-control-status"><span className="demo-control-dot" aria-hidden="true" />{t.header.demoActive}</span>
+        <button type="button" className="demo-control-clear" onClick={resolveLiveIncident} title={t.header.markResolvedTitle}>
+          <X size={14} aria-hidden="true" />{t.header.clearDemo}
+        </button>
+      </div>
+    );
   }
-
   return (
-    <span
-      suppressHydrationWarning
-      style={{
-        fontSize: "12px",
-        color: "var(--text-secondary)",
-        fontVariantNumeric: "tabular-nums",
-        letterSpacing: "0.04em",
-      }}
-    >
-      {time} AZT
-    </span>
+    <button type="button" className="demo-control" onClick={simulateLiveIncident} title={t.header.simulateLiveIncident}>
+      <FlaskConical size={15} aria-hidden="true" /><span>{t.header.demoScenario}</span>
+    </button>
   );
 }
 
-export default function Header({
-  onLogout,
-  onMenuClick,
-  userName = "Operator",
-  userRole = "Viewer",
-}: Props) {
-  const { hasLiveIncident, simulateLiveIncident, resolveLiveIncident } = useIncidentStore();
+export default function Header({ onLogout, onMenuClick, menuExpanded, signingOut, userName = "", userRole = "" }: Props) {
   const { t } = useLanguage();
 
   return (
-    <header
-      style={{
-        height: "var(--header-height)",
-        minHeight: "var(--header-height)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 20px",
-        background: "var(--glass-bg)",
-        borderBottom: "1px solid var(--glass-border)",
-        flexShrink: 0,
-        zIndex: 50,
-      }}
-    >
-      {/* Left — Menu toggle + Brand */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+    <header className="workspace-header">
+      <div className="workspace-header-start">
         {onMenuClick && (
-          <button
-            type="button"
-            title={t.header.toggleNav}
-            aria-label={t.header.toggleNav}
-            onClick={onMenuClick}
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 8,
-              border: "1px solid var(--glass-border)",
-              background: "transparent",
-              color: "var(--text-secondary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "var(--text-primary)";
-              e.currentTarget.style.background = "var(--glass-bg-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = "var(--text-secondary)";
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            <Menu size={17} strokeWidth={2} />
+          <button type="button" className="ui-icon-button" aria-label={t.header.toggleNav} aria-expanded={menuExpanded} aria-controls="workspace-nav" onClick={onMenuClick}>
+            <Menu size={19} aria-hidden="true" />
           </button>
         )}
-        <img
-          src="/logo-icon.png"
-          alt="SeaSentry"
-          style={{ width: 36, height: 36, objectFit: "contain", flexShrink: 0 }}
-        />
-        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: 16,
-              letterSpacing: "0.08em",
-              color: "var(--text-primary)",
-            }}
-          >
-            SeaSentry
-          </span>
-          <span
-            style={{
-              fontSize: 11,
-              color: "var(--text-secondary)",
-              marginTop: 2,
-              letterSpacing: "0.01em",
-            }}
-          >
-            {t.header.tagline}
-          </span>
-        </div>
+        <Link href="/dashboard" className="workspace-brand">
+          <Waves size={26} strokeWidth={1.6} aria-hidden="true" />
+          <span className="workspace-brand-copy"><strong translate="no">SeaSentry</strong><span>{t.header.tagline}</span></span>
+        </Link>
       </div>
 
-      {/* Right — System status + user */}
-      <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+      <div className="workspace-header-actions">
         <LiveClock />
-        <ThemeToggle />
+        <DemoScenarioControl />
         <LanguageToggle />
-
-        <button
-          type="button"
-          onClick={() => {
-            if (!hasLiveIncident) simulateLiveIncident();
-          }}
-          title={
-            hasLiveIncident
-              ? t.header.liveIncidentActive
-              : t.header.simulateLiveIncident
-          }
-          className={hasLiveIncident ? "system-status-blink" : undefined}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "6px 14px",
-            borderRadius: 20,
-            background: hasLiveIncident ? "#B91C1C" : "rgba(34, 197, 94, 0.08)",
-            border: hasLiveIncident ? "1px solid #7F1D1D" : "1px solid rgba(34, 197, 94, 0.22)",
-            boxShadow: hasLiveIncident ? "0 2px 10px rgba(185, 28, 28, 0.45)" : "none",
-            cursor: hasLiveIncident ? "default" : "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          <span
-            className={hasLiveIncident ? undefined : "live-dot"}
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: hasLiveIncident ? "#FFFFFF" : "var(--color-low)",
-              flexShrink: 0,
-            }}
-          />
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: "0.07em",
-              textTransform: "uppercase",
-              color: hasLiveIncident ? "#FFFFFF" : "var(--color-low)",
-            }}
-          >
-            {hasLiveIncident ? t.header.incidentActive : t.header.systemOnline}
-          </span>
-        </button>
-
-        {hasLiveIncident && (
-          <button
-            type="button"
-            onClick={resolveLiveIncident}
-            title={t.header.markResolvedTitle}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              borderRadius: 20,
-              background: "var(--accent-soft)",
-              border: "1px solid rgba(129,178,154,0.35)",
-              color: "var(--accent)",
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            <CheckCircle2 size={12} />
-            {t.header.markResolved}
+        <ThemeToggle />
+        {userName && (
+          <div className="workspace-user">
+            <span className="workspace-avatar" aria-hidden="true">{initials(userName)}</span>
+            <span className="workspace-user-copy"><strong>{userName}</strong><span>{userRole}</span></span>
+          </div>
+        )}
+        {onLogout && (
+          <button type="button" className="ui-icon-button" onClick={onLogout} disabled={signingOut} aria-busy={signingOut || undefined} title={t.header.signOut} aria-label={t.header.signOut}>
+            <LogOut size={17} aria-hidden="true" />
           </button>
         )}
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            paddingLeft: 16,
-            borderLeft: "1px solid var(--glass-border)",
-          }}
-        >
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: "50%",
-              background: "var(--card-surface)",
-              border: "1px solid var(--glass-border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--accent)",
-            }}
-          >
-            <User size={15} strokeWidth={2} />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-              {userName}
-            </span>
-            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>{userRole}</span>
-          </div>
-          {onLogout && (
-            <button
-              type="button"
-              title={t.header.signOut}
-              onClick={onLogout}
-              style={{
-                marginLeft: 4,
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: "1px solid var(--glass-border)",
-                background: "transparent",
-                color: "var(--text-secondary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-primary)";
-                e.currentTarget.style.background = "var(--glass-bg-hover)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
-                e.currentTarget.style.background = "transparent";
-              }}
-            >
-              <LogOut size={14} />
-            </button>
-          )}
-        </div>
       </div>
     </header>
   );

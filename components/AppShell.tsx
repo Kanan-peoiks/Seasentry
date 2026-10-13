@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
-import Sidebar from "@/components/Sidebar";
+import Sidebar, { WorkspaceNav } from "@/components/Sidebar";
+import Dialog from "@/components/ui/Dialog";
 import type { NavId } from "@/lib/nav";
-import { isAuthenticated, logout, refreshCurrentUser, type UserRole } from "@/lib/auth";
-import { useIncidentStore } from "@/lib/incident-store";
+import { isAuthenticated, logout, refreshCurrentUser, type AuthUser } from "@/lib/auth";
 import { useLanguage } from "@/lib/useLanguage";
 
 type Props = {
@@ -14,27 +14,26 @@ type Props = {
   children: React.ReactNode;
 };
 
-// proxy.ts is the real gate (checks the httpOnly session cookie
-// server-side). This client-side check just avoids briefly flashing
-// authenticated content if the client's view is stale. The role shown
-// below is always re-fetched from the backend on mount (refreshCurrentUser)
-// rather than trusted from a possibly-stale localStorage cache — a
-// left-over role from testing a different account in the same browser
-// should never be displayed as if it were the current one.
+const COLLAPSE_KEY = "seasentry-nav-collapsed";
+
+function readCollapsed() {
+  try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; }
+}
+
 export default function AppShell({ active, children }: Props) {
   const router = useRouter();
-  const { loading: incidentsLoading } = useIncidentStore();
   const { t } = useLanguage();
-  const [mounted, setMounted] = useState(false);
-  const [userName, setUserName] = useState("Operator");
-  const [userRole, setUserRole] = useState<UserRole>("viewer");
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const ROLE_LABEL: Record<UserRole, string> = {
-    viewer: t.header.roleViewer,
-    operator: t.header.roleOperator,
-    admin: t.header.roleAdmin,
-  };
+  const roleLabel: Record<AuthUser["role"], string> = { viewer: t.header.roleViewer, operator: t.header.roleOperator, admin: t.header.roleAdmin };
+
+  useEffect(() => {
+    // Restoring a per-viewer layout preference from storage after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(readCollapsed());
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -42,65 +41,43 @@ export default function AppShell({ active, children }: Props) {
       return;
     }
     let cancelled = false;
-    (async () => {
-      const user = await refreshCurrentUser();
+    void refreshCurrentUser().then((next) => {
       if (cancelled) return;
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-      setUserName(user.name);
-      setUserRole(user.role);
-      setMounted(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
+      if (!next) router.replace("/login");
+      else setUser(next);
+    });
+    return () => { cancelled = true; };
   }, [router]);
+
+  const toggleMenu = () => {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      setDrawerOpen(true);
+      return;
+    }
+    setCollapsed((value) => {
+      try { localStorage.setItem(COLLAPSE_KEY, value ? "0" : "1"); } catch { /* Preference only. */ }
+      return !value;
+    });
+  };
 
   const handleLogout = () => {
     logout();
     router.push("/login");
   };
 
-  if (!mounted) return null;
-
-  if (incidentsLoading) {
-    return (
-      <div className="dashboard-shell">
-        <Header
-          onLogout={handleLogout}
-          onMenuClick={() => setSidebarExpanded((v) => !v)}
-          userName={userName}
-          userRole={ROLE_LABEL[userRole]}
-        />
-        <div className="dashboard-body">
-          <Sidebar active={active} expanded={sidebarExpanded} />
-          <main
-            className="dashboard-main"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
-          >
-            <div style={{ color: "var(--text-secondary)", fontSize: 14 }}>
-              Loading incidents… (the backend may take up to a minute to wake up)
-            </div>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   return (
     <div className="dashboard-shell">
-      <Header
-        onLogout={handleLogout}
-        onMenuClick={() => setSidebarExpanded((v) => !v)}
-        userName={userName}
-        userRole={ROLE_LABEL[userRole]}
-      />
+      <a href="#workspace-main" className="skip-link">{t.common.skipToContent}</a>
+      <Header onLogout={handleLogout} onMenuClick={toggleMenu} menuExpanded={drawerOpen || !collapsed} userName={user.name} userRole={roleLabel[user.role]} />
       <div className="dashboard-body">
-        <Sidebar active={active} expanded={sidebarExpanded} />
-        <main className="dashboard-main">{children}</main>
+        <Sidebar active={active} collapsed={collapsed} showAdmin={user.role === "admin"} />
+        <main id="workspace-main" className="dashboard-main" tabIndex={-1}>{children}</main>
       </div>
+      <Dialog open={drawerOpen} onClose={() => setDrawerOpen(false)} title="SeaSentry" label={t.sidebar.navigation} variant="drawer">
+        <WorkspaceNav active={active} showAdmin={user.role === "admin"} onNavigate={() => setDrawerOpen(false)} />
+      </Dialog>
     </div>
   );
 }

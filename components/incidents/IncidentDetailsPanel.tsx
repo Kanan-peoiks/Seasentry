@@ -2,11 +2,11 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { jsPDF } from "jspdf";
 import { CheckCircle2, ChevronDown, CircleSlash, FileDown, Satellite, Ship, TriangleAlert, UserCheck, X, XCircle, Droplets, ArrowUpRight } from "lucide-react";
-import { formatAreaM2, formatDateTimeAZT, HUMAN_DECISION_LABEL, getVesselById, haversineKm } from "@/lib/mock-data";
+import { formatAreaM2, HUMAN_DECISION_LABEL, getVesselById, haversineKm } from "@/lib/mock-data";
+import { archiveIncidentReport, downloadIncidentPdf } from "@/lib/reports";
 import type { Incident } from "@/lib/types";
-import { deriveAiImpact, deriveResponseMaterials, deriveProjectionSeries, deriveResponseOptions, compassLabel, SORBENT_RATIO_G, type ResponseMaterials, type SpillSourceResult } from "@/lib/spill-physics";
+import { deriveAiImpact, deriveResponseMaterials, deriveProjectionSeries, deriveResponseOptions, compassLabel, SORBENT_RATIO_G, type ResponseMaterials } from "@/lib/spill-physics";
 import { useSpillSourceEstimate } from "@/lib/useSpillSourceEstimate";
 import { ConfidenceGauges, SpillProjectionChart, ResponseOptionsBar } from "@/components/incidents/IncidentCharts";
 import RiskBadge from "@/components/ui/RiskBadge";
@@ -30,241 +30,6 @@ function findSimilarIncidents(incident: Incident, all: Incident[]) {
     .filter((i) => i.distanceKm <= 100)
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 2);
-}
-
-/**
- * Report template / data-source map (kept here, next to the generator, so it
- * stays in sync as fields are wired up). Every section below is either REAL
- * (backed by an actual stored value or a formula over one) or a documented
- * SIMULATED placeholder standing in for an integration that isn't built yet.
- * This function intentionally renders the full future shape of the report —
- * including sections whose underlying data is still mock — so the template
- * doesn't need to be redesigned each time a real data source lands; only the
- * section's inputs change.
- *
- *  - Incident information       REAL      — stored incident row (title, location,
- *                                            coords, timestamp, risk, status, area).
- *  - AI analysis                SIMULATED — `aiProbability`/`aiSummary` are either
- *                                            seeded demo values (lib/mock-data.ts,
- *                                            backend/app/seed.py) or written by a
- *                                            human via the manual-report form; no
- *                                            real detection model runs yet. Once
- *                                            backend/ML_INTEGRATION.md's model is
- *                                            wired in, these two fields should be
- *                                            populated from its live inference
- *                                            output instead.
- *  - Satellite imagery          REAL, when present — incidents created via the
- *                                            "Check for New Imagery" scan
- *                                            (POST /detect) carry a real fetched
- *                                            Sentinel-1 tile + an AI-overlay
- *                                            rectangle in sarImageBase64/
- *                                            sarOverlayBase64, embedded below via
- *                                            jsPDF's doc.addImage(...). Seeded or
- *                                            manually-reported incidents have
- *                                            neither field and fall back to the
- *                                            placeholder note (see ImagePlaceholder
- *                                            in the on-screen panel above).
- *  - Confidence breakdown        REAL, when present — texture/edge/contrast sub-
- *                                            scores come straight from spill_detect.py's
- *                                            _blob_features() (see DetectionResult's
- *                                            texture_pct/edge_pct/contrast_pct) for
- *                                            incidents created via a real POST /detect
- *                                            scan. Seeded/manually-reported incidents
- *                                            predate that data existing, so they fall
- *                                            back to sub-scores jittered around the
- *                                            real aiProbability — see deriveAiDeepDive.
- *  - Processing pipeline         REAL, when present — fetch_ms/analyze_ms are actual
- *                                            wall-clock timings from routers/detect.py;
- *                                            shown only when both exist, never fabricated.
- *  - Spill source & drift       PARTIAL   — `sourceEstimate` is a real computation
- *                                            (lib/spill-physics.ts's
- *                                            estimateSpillSource), but over a
- *                                            documented simplification: wind-only
- *                                            drift (3% of wind speed), no ocean-
- *                                            current data. `leakRateBbl` is a pure
- *                                            formula over the real detected area (no
- *                                            random noise); `depthM` genuinely has no
- *                                            real data source (no bathymetric chart
- *                                            integration) and stays a seeded guess.
- *  - Human decision              REAL      — actually entered by an operator via
- *                                            the review actions (applyHumanAction
- *                                            in lib/incident-store.tsx) and
- *                                            persisted on the incident row.
- *  - Response & cleanup          REAL-ish  — `materials` is a deterministic formula
- *                                            (lib/spill-physics.ts's
- *                                            deriveResponseMaterials) over the
- *                                            incident's real area/oil-volume
- *                                            estimate: boom length from the slick's
- *                                            real perimeter, skimmer/vessel counts
- *                                            scaled from the real recovered-volume
- *                                            estimate, and the real sorbent ratio
- *                                            (1g cotton ≈ 25-30g oil) — no random
- *                                            noise left in any of these. Team
- *                                            assignment is still an illustrative
- *                                            rotation — no real dispatch system exists.
- *
- * Not yet in this report at all, for when they're built:
- *  - Real AIS-sourced vessel corroboration (aisstream.io — not integrated).
- *  - Spill source attribution (SOCAR/BP/Others) is fixed, illustrative
- *    percentages — deriveSourceAttribution — genuinely unconfirmable without
- *    real investigation/pipeline-ownership records this system doesn't have.
- */
-function generateIncidentPdf(
-  incident: Incident,
-  materials: ResponseMaterials,
-  sourceEstimate: SpillSourceResult | null
-) {
-  const doc = new jsPDF();
-  let y = 20;
-  const line = (text: string, size = 11, bold = false, gap = 7) => {
-    doc.setFontSize(size);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
-    doc.text(text, 14, y);
-    y += gap;
-  };
-  const wrapped = (text: string, size = 10, gap = 5.5) => {
-    doc.setFontSize(size);
-    doc.setFont("helvetica", "normal");
-    const chunks = doc.splitTextToSize(text, 182);
-    chunks.forEach((chunk: string) => {
-      doc.text(chunk, 14, y);
-      y += gap;
-    });
-  };
-  const ensureSpace = (needed = 12) => {
-    if (y + needed > 275) {
-      doc.addPage();
-      y = 20;
-    }
-  };
-  line("SeaSentry — Incident Response Report", 18, true, 10);
-  doc.setDrawColor(200);
-  doc.line(14, y - 4, 196, y - 4);
-  y += 2;
-
-  line(`Incident ${incident.displayId} — ${incident.title}`, 13, true, 8);
-  line(`Location: ${incident.location}`);
-  line(`Coordinates: ${incident.lat.toFixed(4)}°N, ${incident.lng.toFixed(4)}°E`);
-  line(`Detected: ${formatDateTimeAZT(incident.timestamp)} AZT`);
-  line(`Risk: ${incident.risk}    Status: ${incident.status}`);
-  line(`Estimated area: ${formatAreaM2(incident.areaM2)}`);
-  y += 4;
-
-  ensureSpace(30);
-  line("AI analysis", 13, true, 8);
-  line(`Detection source: ${incident.detectionSource}`);
-  line(`Model confidence (not-pollution probability): ${Math.round(incident.aiProbability * 100)}%`);
-  wrapped(incident.aiSummary);
-  y += 4;
-
-  ensureSpace(incident.sarImageBase64 ? 68 : 24);
-  line("Satellite imagery", 13, true, 8);
-  if (incident.sarImageBase64) {
-    const imgW = 88;
-    const imgH = 60;
-    try {
-      doc.addImage(`data:image/png;base64,${incident.sarImageBase64}`, "PNG", 14, y, imgW, imgH);
-      if (incident.sarOverlayBase64) {
-        doc.addImage(`data:image/png;base64,${incident.sarOverlayBase64}`, "PNG", 14 + imgW + 6, y, imgW, imgH);
-      }
-      y += imgH + 3;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "italic");
-      doc.text("Original SAR (VV/VH/contrast, false-color)", 14, y);
-      if (incident.sarOverlayBase64) {
-        doc.text("AI overlay — detected anomaly outlined", 14 + imgW + 6, y);
-      }
-      y += 6;
-    } catch {
-      wrapped("[Satellite image failed to embed.]", 9);
-    }
-  } else {
-    wrapped(
-      "[Original SAR scene and AI-overlay tile will be embedded here once real Sentinel " +
-        "Hub satellite-image fetching is implemented — see ImagePlaceholder in this file " +
-        "and lib/spill-physics.ts's notes. Not available for this incident (no real scan was run).]",
-      9
-    );
-  }
-  y += 4;
-
-  ensureSpace(36);
-  line("Spill source & drift analysis", 13, true, 8);
-  if (sourceEstimate?.available) {
-    line(
-      `Estimated source: ${sourceEstimate.lat.toFixed(4)}°N, ${sourceEstimate.lng.toFixed(4)}°E (${sourceEstimate.confidencePct}% confidence)`
-    );
-    line(
-      `Drift: ${sourceEstimate.distanceKm} km over ${sourceEstimate.hoursElapsed} h, toward ${compassLabel(sourceEstimate.downwindBearingDeg)}`
-    );
-    line(`Estimated leak rate: ~${sourceEstimate.leakRateBbl} bbl/h    Estimated depth: ~${sourceEstimate.depthM} m`);
-    wrapped(
-      `Method: reverse-calculated from live wind data (bearing ${sourceEstimate.bearingCompass}, ${sourceEstimate.bearingDeg}°) — a wind-only simplification (no ocean-current data source available); leak rate and depth are seeded estimates, not measurements.`,
-      9
-    );
-  } else {
-    wrapped(
-      "[Not available for this incident — needs live wind data, or the incident is too old for a reliable back-calculation.]",
-      9
-    );
-  }
-  y += 4;
-
-  ensureSpace(24);
-  line("Human decision", 13, true, 8);
-  line(`Decision: ${HUMAN_DECISION_LABEL[incident.humanDecision] ?? incident.humanDecision}`);
-  if (incident.humanDecisionBy) line(`Specialist: ${incident.humanDecisionBy}`);
-  if (incident.humanDecisionAt) line(`Decided at: ${formatDateTimeAZT(incident.humanDecisionAt)} AZT`);
-  if (incident.humanDecisionNote) line(`Notes: ${incident.humanDecisionNote}`);
-  y += 4;
-
-  // No response/cleanup plan for a dismissed detection — there's nothing to
-  // respond to, so materials/cost figures would be meaningless here.
-  if (incident.status !== "rejected") {
-    ensureSpace(30);
-    line("Response & cleanup", 13, true, 8);
-    line(`Team assigned: ${materials.team}`);
-    line(`Boom deployed: ${materials.boomMeters} m`);
-    line(`Sorbent used: ${materials.sorbentKg} kg (ratio: 1g ~ ${SORBENT_RATIO_G}g oil)`);
-    line(`Skimmer units: ${materials.skimmerUnits}`);
-    line(`Support vessels: ${materials.vesselCount}`);
-    line(`Estimated duration: ${materials.durationHours} h`);
-    line(`Estimated cost: $${materials.estimatedCostUsd.toLocaleString("en-US")}`);
-    y += 6;
-  }
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "italic");
-  doc.text(
-    "Demo document generated by SeaSentry — an oil-spill intelligence platform. Figures are simulated.",
-    14,
-    290
-  );
-
-  doc.save(`seasentry-incident-${incident.displayId.replace("#", "")}-report.pdf`);
-}
-
-/** Best-effort: record that this report was generated so it shows up in the
- * report history later. Never blocks or surfaces errors to the PDF flow —
- * the download already succeeded regardless of whether this save works. */
-function saveReportSnapshot(incident: Incident, materials: ResponseMaterials) {
-  fetch("/api/reports", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      incidentId: incident.id,
-      incidentDisplayId: incident.displayId,
-      incidentTitle: incident.title,
-      team: materials.team,
-      boomMeters: materials.boomMeters,
-      sorbentKg: materials.sorbentKg,
-      oilMassKg: materials.oilMassKg,
-      skimmerUnits: materials.skimmerUnits,
-      vesselCount: materials.vesselCount,
-      durationHours: materials.durationHours,
-      estimatedCostUsd: materials.estimatedCostUsd,
-    }),
-  }).catch((err) => console.error("saveReportSnapshot failed:", err));
 }
 
 type Props = {
@@ -319,7 +84,7 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
   const vessel = getVesselById(live?.relatedVesselId);
   const canAct = canOperate(user);
   const { wind, sea, windIssue, estimate: sourceEstimate, loading: weatherLoading } = useSpillSourceEstimate(live);
-  const [pdfState, setPdfState] = useState<{ id: string; state: "generating" | "ready" } | null>(null);
+  const [report, setReport] = useState<{ id: string; pdf: "generating" | "ready" | "error"; archive: "idle" | "saving" | "saved" | "failed" | "skipped" } | null>(null);
   const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
 
   const saving = Boolean(live && pendingActionId === live.id);
@@ -332,14 +97,27 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
     if (!result.ok) setActionError({ id: live.id, message: result.error || d.decisionFailed });
   };
 
-  const generatePdf = (materials: ResponseMaterials) => {
-    if (!live || pdfState?.state === "generating") return;
-    setPdfState({ id: live.id, state: "generating" });
-    setTimeout(() => {
-      generateIncidentPdf(live, materials, sourceEstimate);
-      setPdfState({ id: live.id, state: "ready" });
-      saveReportSnapshot(live, materials);
-    }, 300);
+  const archive = async (target: Incident, materials: ResponseMaterials) => {
+    setReport((prev) => (prev && prev.id === target.id ? { ...prev, archive: "saving" } : prev));
+    const result = await archiveIncidentReport(target, materials);
+    const next = result.ok ? "saved" : result.error === "simulation" ? "skipped" : "failed";
+    setReport((prev) => (prev && prev.id === target.id ? { ...prev, archive: next } : prev));
+  };
+
+  // Download and archive are separate steps: a failed archive never hides a
+  // successful download, and "generate again" always produces a new file.
+  const generatePdf = async (materials: ResponseMaterials) => {
+    if (!live || (report?.id === live.id && report.pdf === "generating")) return;
+    const target = live;
+    setReport({ id: target.id, pdf: "generating", archive: "idle" });
+    try {
+      await downloadIncidentPdf(target, materials, sourceEstimate, t, lang);
+    } catch {
+      setReport({ id: target.id, pdf: "error", archive: "idle" });
+      return;
+    }
+    setReport({ id: target.id, pdf: "ready", archive: "idle" });
+    await archive(target, materials);
   };
 
   const title = live ? d.incidentNumber(live.displayId) : "";
@@ -352,7 +130,7 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
     const similar = findSimilarIncidents(live, allIncidents);
     const hasFeatures = live.texturePct != null && live.edgePct != null && live.contrastPct != null;
     const error = actionError?.id === live.id ? actionError.message : null;
-    const pdf = pdfState?.id === live.id ? pdfState.state : "idle";
+    const rep = report?.id === live.id ? report : null;
     const closed = stage === "resolved" || stage === "rejected";
 
     return (
@@ -551,10 +329,19 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
         {canAct && stage !== "pending" && stage !== "escalated" && (
           <section className="detail-section">
             <h3 className="detail-title"><FileDown size={16} aria-hidden="true" />{stage === "rejected" ? d.dismissalReport : d.responseReport}</h3>
-            <Button onClick={() => generatePdf(materials)} busy={pdf === "generating"}>
-              <FileDown size={16} aria-hidden="true" />{pdf === "ready" ? d.generateAgain : d.generatePdfReport}
-            </Button>
-            {pdf === "ready" && <p className="detail-hint" role="status">{d.pdfSavedNote}</p>}
+            <div className="report-actions">
+              <Button onClick={() => void generatePdf(materials)} busy={rep?.pdf === "generating"}>
+                <FileDown size={16} aria-hidden="true" />{rep?.pdf === "ready" ? d.generateAgain : d.generatePdfReport}
+              </Button>
+            </div>
+            <div className="report-status" aria-live="polite">
+              {rep?.pdf === "error" && <Notice tone="error">{t.pdf.failed}</Notice>}
+              {rep?.pdf === "ready" && <p className="detail-hint">{t.pdf.downloaded}</p>}
+              {rep?.archive === "saving" && <p className="detail-hint">{t.pdf.archiving}</p>}
+              {rep?.archive === "saved" && <Notice tone="success">{t.pdf.archived}</Notice>}
+              {rep?.archive === "skipped" && <p className="detail-hint">{t.pdf.simulationNotArchived}</p>}
+              {rep?.archive === "failed" && <Notice tone="warning" action={<Button onClick={() => void archive(live, materials)}>{t.pdf.archiveRetry}</Button>}>{t.pdf.archiveFailed}</Notice>}
+            </div>
           </section>
         )}
       </div>

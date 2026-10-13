@@ -1,210 +1,119 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { ArrowRight, CheckCircle2, Droplets, Eye, RefreshCw, ShieldCheck } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
-import StatCard from "@/components/ui/StatCard";
 import RiskBadge from "@/components/ui/RiskBadge";
 import StatusBadge from "@/components/ui/StatusBadge";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
+import DataState from "@/components/ui/DataState";
 import IncidentDetailsPanel from "@/components/incidents/IncidentDetailsPanel";
 import { useIncidentStore } from "@/lib/incident-store";
-import { formatAreaM2, formatDateTimeAZT } from "@/lib/mock-data";
-import type { IncidentStatus } from "@/lib/types";
+import { formatAreaM2 } from "@/lib/mock-data";
+import { decisionStage, type DecisionStage } from "@/lib/incident-metrics";
+import { formatWorkspaceTime, setWorkspaceQuery } from "@/lib/workspace-url";
 import { useLanguage } from "@/lib/useLanguage";
-import { Siren, Eye, Droplets, CheckCircle2 } from "lucide-react";
+import type { Incident } from "@/lib/types";
 
-type ResponseStepKey = "stepDetection" | "stepHumanDecision" | "stepCleanup" | "stepResolution";
-
-const FLOW: { key: IncidentStatus | "rejected"; labelKey: ResponseStepKey }[] = [
-  { key: "detected", labelKey: "stepDetection" },
-  { key: "under_review", labelKey: "stepHumanDecision" },
-  { key: "cleaning", labelKey: "stepCleanup" },
-  { key: "resolved", labelKey: "stepResolution" },
+type Column = "review" | "confirmed" | "cleaning" | "resolved";
+const COLUMNS: { id: Column; stages: DecisionStage[]; icon: React.ReactNode }[] = [
+  { id: "review", stages: ["pending", "escalated"], icon: <Eye size={18} aria-hidden="true" /> },
+  { id: "confirmed", stages: ["confirmed"], icon: <ShieldCheck size={18} aria-hidden="true" /> },
+  { id: "cleaning", stages: ["cleaning"], icon: <Droplets size={18} aria-hidden="true" /> },
+  { id: "resolved", stages: ["resolved"], icon: <CheckCircle2 size={18} aria-hidden="true" /> },
 ];
+const RISK_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
 
 export default function ResponsePage() {
   return (
     <AppShell active="response">
-      <ResponseContent />
+      <Suspense fallback={<DataState loading />}>
+        <ResponseContent />
+      </Suspense>
     </AppShell>
   );
 }
 
 function ResponseContent() {
-  const { t } = useLanguage();
-  const { responseOps, stats, getIncidentById } = useIncidentStore();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = selectedId ? getIncidentById(selectedId) || null : null;
+  const { t, lang } = useLanguage();
+  const w = t.response;
+  const params = useSearchParams();
+  const { incidents, loading, error, refreshing, reloadIncidents, getIncidentById } = useIncidentStore();
+  const open = params.get("open");
+  const selected = open ? getIncidentById(open) ?? null : null;
 
-  const grouped = useMemo(() => {
-    const g: Record<string, typeof responseOps> = {
-      detected: [],
-      under_review: [],
-      cleaning: [],
-      resolved: [],
-    };
-    for (const op of responseOps) {
-      if (g[op.status]) g[op.status].push(op);
-    }
-    return g;
-  }, [responseOps]);
+  const grouped = Object.fromEntries(COLUMNS.map((col) => [
+    col.id,
+    incidents
+      .filter((i) => col.stages.includes(decisionStage(i)))
+      .sort((a, b) => RISK_ORDER[a.risk] - RISK_ORDER[b.risk] || Date.parse(b.timestamp) - Date.parse(a.timestamp)),
+  ])) as Record<Column, Incident[]>;
+  const rejected = incidents.filter((i) => i.status === "rejected").length;
+
+  const openIncident = (e: React.MouseEvent<HTMLAnchorElement>, incident: Incident) => {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    setWorkspaceQuery({ open: incident.id }, true);
+  };
 
   return (
     <>
       <div className="dashboard-scroll">
-        <PageHeader
-          title={t.response.title}
-          subtitle={t.response.subtitle}
-        />
+        <PageHeader title={w.title} subtitle={w.subtitle} actions={<Button onClick={() => void reloadIncidents()} busy={refreshing}><RefreshCw size={16} aria-hidden="true" />{t.common.refresh}</Button>} />
+        {error && incidents.length > 0 && <Notice tone="error" action={<Button onClick={() => void reloadIncidents()}>{t.session.retry}</Button>}>{t.dashboard.refreshFailed}</Notice>}
 
-        <div className="panel" style={{ padding: "20px 18px 16px", flexShrink: 0 }}>
-          <div className="panel-title" style={{ marginBottom: 22 }}>{t.response.workflowTitle}</div>
-          <div style={{ display: "flex", alignItems: "flex-start", overflowX: "auto", paddingBottom: 2, minHeight: 72 }}>
-            {[
-              t.response.stepDetection,
-              t.response.stepAiAnalysis,
-              t.response.stepHumanDecision,
-              t.response.stepResponse,
-              t.response.stepCleanup,
-              t.response.stepResolution,
-            ].map(
-              (step, i, arr) => (
-                <div
-                  key={step}
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    flex: i < arr.length - 1 ? "1 1 0" : "0 0 auto",
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, minWidth: 92 }}>
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        background: "var(--accent-soft)",
-                        border: "1.5px solid var(--accent)",
-                        color: "var(--accent)",
-                        fontSize: 12,
-                        fontWeight: 700,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {i + 1}
-                    </div>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        letterSpacing: "0.05em",
-                        textTransform: "uppercase",
-                        color: "var(--text-secondary)",
-                        textAlign: "center",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {step}
-                    </span>
-                  </div>
-                  {i < arr.length - 1 && (
-                    <div style={{ flex: 1, minWidth: 24, height: 1.5, background: "var(--glass-border)", marginTop: 13 }} />
-                  )}
-                </div>
-              )
-            )}
-          </div>
-        </div>
+        <nav className="stage-summary" aria-label={w.workflowTitle}>
+          <ol>
+            {COLUMNS.map((col, index) => (
+              <li key={col.id}>
+                <a href={`#stage-${col.id}`}>
+                  <span className="stage-index">{index + 1}</span>
+                  <span className="stage-copy"><strong>{w.stages[col.id]}</strong><span>{w.stageHints[col.id]}</span></span>
+                  <span className="stage-count">{loading ? "—" : grouped[col.id].length}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+          {rejected > 0 && <p className="stage-note">{w.rejectedNote(rejected)}</p>}
+        </nav>
 
-        <section
-          style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}
-          className="ops-stat-grid"
-        >
-          <StatCard label={t.response.activeOps} value={stats.active} accent="var(--color-high)" icon={<Siren size={15} />} />
-          <StatCard label={t.response.underReview} value={stats.underReview} accent="var(--accent)" icon={<Eye size={15} />} />
-          <StatCard
-            label={t.response.cleaning}
-            value={grouped.cleaning.length}
-            accent="var(--color-info)"
-            icon={<Droplets size={15} />}
-          />
-          <StatCard label={t.response.resolved} value={stats.resolved} accent="var(--color-low)" icon={<CheckCircle2 size={15} />} />
-        </section>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-            gap: 12,
-          }}
-          className="response-columns"
-        >
-          {FLOW.map((col) => (
-            <div key={col.key} className="panel panel-static" style={{ minHeight: 280 }}>
-              <div className="panel-header">
-                <span className="panel-title">{t.response[col.labelKey]}</span>
-                <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                  {grouped[col.key]?.length || 0}
-                </span>
-              </div>
-              <div className="panel-body" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                {(grouped[col.key] || []).length === 0 && (
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)", padding: 8 }}>
-                    {t.response.noIncidentsInStage}
-                  </div>
+        <DataState loading={loading} error={incidents.length ? null : error} onRetry={() => void reloadIncidents()}>
+          <div className="response-board">
+            {COLUMNS.map((col) => (
+              <section key={col.id} id={`stage-${col.id}`} className={`response-column response-column--${col.id}`} aria-labelledby={`stage-title-${col.id}`}>
+                <header className="response-column-head">
+                  {col.icon}
+                  <h2 id={`stage-title-${col.id}`}>{w.stages[col.id]}</h2>
+                  <span className="count-badge">{grouped[col.id].length}</span>
+                </header>
+                {grouped[col.id].length === 0 ? (
+                  <p className="rail-empty">{w.noIncidentsInStage}</p>
+                ) : (
+                  <ul className="response-list">
+                    {grouped[col.id].map((incident) => (
+                      <li key={incident.id}>
+                        <Link className="response-card" href={`/response?open=${encodeURIComponent(incident.id)}`} onClick={(e) => openIncident(e, incident)}>
+                          <span className="response-card-top"><strong>{incident.displayId}</strong><RiskBadge risk={incident.risk} /></span>
+                          <span className="response-card-title">{incident.title || incident.location}</span>
+                          <span className="response-card-meta">{incident.location} · {formatAreaM2(incident.areaM2)}</span>
+                          <span className="response-card-meta">{w.lastChange(formatWorkspaceTime(incident.humanDecisionAt || incident.timestamp, lang))}</span>
+                          <span className="response-card-next"><StatusBadge status={incident.status} /><span>{w.next[decisionStage(incident)]}</span><ArrowRight size={15} aria-hidden="true" /></span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                {(grouped[col.key] || []).map((op) => (
-                  <button
-                    key={op.id}
-                    type="button"
-                    onClick={() => setSelectedId(op.incidentId)}
-                    style={{
-                      textAlign: "left",
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--glass-border)",
-                      borderRadius: 8,
-                      padding: 12,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      color: "inherit",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ fontWeight: 700, color: "var(--accent)" }}>{op.displayId}</span>
-                      <RiskBadge risk={op.risk} />
-                    </div>
-                    <div style={{ fontSize: 13, marginTop: 6 }}>{op.location}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
-                      {formatAreaM2(op.areaM2)} · {op.assignedTeam}
-                    </div>
-                    <div style={{ marginTop: 8 }}>
-                      <StatusBadge status={op.status} />
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>
-                      {t.response.started(formatDateTimeAZT(op.startTime))}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+              </section>
+            ))}
+          </div>
+        </DataState>
       </div>
 
-      <IncidentDetailsPanel incident={selected} onClose={() => setSelectedId(null)} />
-
-      <style>{`
-        @media (max-width: 1200px) {
-          .response-columns { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .ops-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-        }
-        @media (max-width: 700px) {
-          .response-columns { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+      <IncidentDetailsPanel incident={selected} onClose={() => setWorkspaceQuery({ open: null })} />
     </>
   );
 }

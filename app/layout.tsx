@@ -1,7 +1,20 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import { IncidentStoreProvider } from "@/lib/incident-store";
 import { NO_FLASH_THEME_SCRIPT } from "@/lib/theme";
+import { SessionProvider } from "@/lib/session";
+import ClientPreferences from "@/components/ui/ClientPreferences";
+
+const plex = localFont({
+  src: [
+    { path: "../public/fonts/IBMPlexSans-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../public/fonts/IBMPlexSans-SemiBold.ttf", weight: "600", style: "normal" },
+  ],
+  variable: "--font-ui",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SeaSentry — Satellite & AI Oil Spill Intelligence",
@@ -30,27 +43,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className={plex.variable} suppressHydrationWarning>
       <head>
         {/* Applies the saved (or OS-preferred) theme before first paint,
             so there's no flash of the wrong theme on load. */}
         <script dangerouslySetInnerHTML={{ __html: NO_FLASH_THEME_SCRIPT }} />
-        {/* Google Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-        {/* Leaflet CSS via CDN — avoids Turbopack PostCSS processing panic */}
-        <link
-          rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          crossOrigin="anonymous"
-        />
       </head>
       <body>
-        <IncidentStoreProvider>{children}</IncidentStoreProvider>
+        <ClientPreferences />
+        <SessionProvider>
+          <IncidentStoreProvider>{children}</IncidentStoreProvider>
+        </SessionProvider>
       </body>
     </html>
   );

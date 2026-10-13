@@ -23,7 +23,7 @@ export default function GlobalError({
             alignItems: "center",
             justifyContent: "center",
             padding: 24,
-            background: "#FBF9F5",
+            background: "#F3F7F9",
             fontFamily: "system-ui, sans-serif",
           }}
         >
@@ -33,22 +33,22 @@ export default function GlobalError({
               width: "100%",
               textAlign: "center",
               background: "#FFFFFF",
-              border: "1px solid #E6E2DA",
+              border: "1px solid #D6E2E8",
               borderRadius: 12,
               padding: "32px 28px",
             }}
           >
-            <h1 style={{ fontSize: 18, fontWeight: 650, color: "#2B2D42", margin: "0 0 8px" }}>
+            <h1 style={{ fontSize: 18, fontWeight: 650, color: "#163147", margin: "0 0 8px" }}>
               SeaSentry failed to load
             </h1>
-            <p style={{ fontSize: 13, color: "#6C757D", lineHeight: 1.55, margin: "0 0 24px" }}>
+            <p style={{ fontSize: 13, color: "#526778", lineHeight: 1.55, margin: "0 0 24px" }}>
               A critical error occurred. Please try reloading the page.
             </p>
             <button
               type="button"
               onClick={reset}
               style={{
-                background: "#81B29A",
+                background: "#087F7A",
                 color: "#FFFFFF",
                 border: "none",
                 borderRadius: 8,

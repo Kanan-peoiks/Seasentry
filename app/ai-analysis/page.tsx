@@ -1,278 +1,37 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { ArrowRight, Brain, Clock, RefreshCw, ShieldCheck } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
+import Notice from "@/components/ui/Notice";
+import DataState from "@/components/ui/DataState";
+import Button from "@/components/ui/Button";
 import RiskBadge from "@/components/ui/RiskBadge";
 import StatusBadge from "@/components/ui/StatusBadge";
 import IncidentDetailsPanel from "@/components/incidents/IncidentDetailsPanel";
 import { useIncidentStore } from "@/lib/incident-store";
-import { formatAreaM2, formatDateTimeAZT } from "@/lib/mock-data";
-import type { Incident } from "@/lib/types";
 import { useLanguage } from "@/lib/useLanguage";
-import { Brain, Percent, Maximize2, Clock, CheckCircle2, XCircle, ShieldCheck } from "lucide-react";
+import { incidentProvenance, isMeasuredScan, sarReviewOutcomes, scanConfidence } from "@/lib/incident-metrics";
+import { formatWorkspaceTime, setWorkspaceQuery } from "@/lib/workspace-url";
+import { formatAreaM2 } from "@/lib/mock-data";
 
-type AiAccuracy = {
-  year: number;
-  totalIncidents: number;
-  reviewed: number;
-  confirmed: number;
-  falsePositive: number;
-  stillUnderReview: number;
-  accuracyPct: number | null;
-  avgConfidenceConfirmed: number | null;
-  avgConfidenceFalsePositive: number | null;
-};
-
-export default function AiAnalysisPage() {
-  return (
-    <AppShell active="ai">
-      <Suspense fallback={null}>
-        <AiAnalysisContent />
-      </Suspense>
-    </AppShell>
-  );
-}
-
-function AiAnalysisContent() {
-  const { t } = useLanguage();
-  const { aiAnalyses, getIncidentById } = useIncidentStore();
-  const searchParams = useSearchParams();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const selected = selectedId ? getIncidentById(selectedId) || null : null;
-  const [accuracy, setAccuracy] = useState<AiAccuracy | null>(null);
-
-  useEffect(() => {
-    const openId = searchParams.get("open");
-    if (openId) {
-      setSelectedId(openId);
-      setExpanded(searchParams.get("wide") === "1");
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/incidents/ai-accuracy", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled) setAccuracy(data);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const avgProb =
-    aiAnalyses.length === 0
-      ? 0
-      : Math.round(
-          aiAnalyses.reduce((s, a) => s + a.spillProbability, 0) / aiAnalyses.length
-        );
-  const pendingReview = aiAnalyses.filter((a) => a.reviewStatus === "PENDING").length;
-
-  return (
-    <>
-      <div className="dashboard-scroll">
-        <PageHeader
-          title={t.aiAnalysis.title}
-          subtitle={t.aiAnalysis.subtitle}
-        />
-
-        <div
-          style={{
-            padding: "12px 14px",
-            borderRadius: 10,
-            border: "1px solid rgba(233,196,106,0.3)",
-            background: "rgba(233,196,106,0.08)",
-            fontSize: 13,
-            color: "var(--text-secondary)",
-            lineHeight: 1.5,
-          }}
-        >
-          <strong style={{ color: "var(--color-med-text)" }}>{t.aiAnalysis.humanReviewRequired}</strong>{" "}
-          {t.aiAnalysis.humanReviewBody}
-        </div>
-
-        {accuracy && (
-          <div className="panel panel-static">
-            <div className="panel-header">
-              <span className="panel-title">
-                <ShieldCheck size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-                {t.aiAnalysis.trackRecordTitle(accuracy.year)}
-              </span>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {t.aiAnalysis.basedOnReviewed}
-              </span>
-            </div>
-            <div className="panel-body" style={{ padding: 16 }}>
-              {accuracy.reviewed === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                  {t.aiAnalysis.noReviewedYet}
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 14 }}>
-                    <span style={{ fontSize: 32, fontWeight: 700 }}>{accuracy.accuracyPct}%</span>
-                    <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
-                      {t.aiAnalysis.ofReviewedConfirmed(accuracy.reviewed)}
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 12,
-                    }}
-                    className="ai-accuracy-grid"
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <CheckCircle2 size={16} color="var(--color-low-text)" />
-                      <div>
-                        <div style={{ fontWeight: 650 }}>{accuracy.confirmed} {t.aiAnalysis.confirmed}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                          {accuracy.avgConfidenceConfirmed !== null
-                            ? t.aiAnalysis.avgConfidence(accuracy.avgConfidenceConfirmed)
-                            : "—"}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <XCircle size={16} color="var(--color-high-text)" />
-                      <div>
-                        <div style={{ fontWeight: 650 }}>{accuracy.falsePositive} {t.aiAnalysis.falsePositive}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                          {accuracy.avgConfidenceFalsePositive !== null
-                            ? t.aiAnalysis.avgConfidence(accuracy.avgConfidenceFalsePositive)
-                            : "—"}
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Clock size={16} color="var(--color-med-text)" />
-                      <div>
-                        <div style={{ fontWeight: 650 }}>{accuracy.stillUnderReview} {t.aiAnalysis.stillUnderReview}</div>
-                        <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{t.aiAnalysis.notCountedYet}</div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        <section
-          style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}
-          className="ops-stat-grid"
-        >
-          <StatCard label={t.aiAnalysis.analyses} value={aiAnalyses.length} icon={<Brain size={15} />} />
-          <StatCard label={t.aiAnalysis.avgSpillProbability} value={`${avgProb}%`} accent="var(--accent)" icon={<Percent size={15} />} />
-          <StatCard
-            label={t.aiAnalysis.pendingHumanReview}
-            value={pendingReview}
-            accent="var(--color-med)"
-            icon={<Clock size={15} />}
-          />
-          <StatCard
-            label={t.aiAnalysis.largestEstimatedArea}
-            value={formatAreaM2(Math.max(...aiAnalyses.map((a) => a.estimatedAreaM2), 0))}
-            icon={<Maximize2 size={15} />}
-          />
-        </section>
-
-        <div className="panel panel-static">
-          <div className="panel-header">
-            <span className="panel-title">{t.aiAnalysis.queueTitle}</span>
-            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>{t.aiAnalysis.syncedWithBackend}</span>
-          </div>
-          <div className="panel-body" style={{ padding: 16, display: "grid", gap: 12 }}>
-            {aiAnalyses.length === 0 && (
-              <div style={{ textAlign: "center", color: "var(--text-secondary)", padding: 24 }}>
-                {t.aiAnalysis.noAnalyses}
-              </div>
-            )}
-
-            {aiAnalyses.map((a) => (
-              <article
-                key={a.id}
-                className="row-hover"
-                style={{
-                  border: "1px solid var(--glass-border)",
-                  borderRadius: 10,
-                  padding: 16,
-                  background: "var(--surface-muted)",
-                  cursor: "pointer",
-                }}
-                onClick={() => {
-                  setSelectedId(a.incidentId);
-                  setExpanded(false);
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontWeight: 650, color: "var(--accent)" }}>{a.displayId}</div>
-                    <div style={{ fontSize: 13, marginTop: 2 }}>{a.location}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <RiskBadge risk={a.risk} />
-                    <StatusBadge status={a.status} />
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                    gap: 12,
-                    marginTop: 14,
-                  }}
-                  className="ai-metrics"
-                >
-                  <Metric label={t.aiAnalysis.modelConfidence} value={`${a.spillProbability}%`} />
-                  <Metric label={t.aiAnalysis.estimatedArea} value={formatAreaM2(a.estimatedAreaM2)} />
-                  <Metric label={t.aiAnalysis.detectionConfidence} value={`${a.confidence}%`} />
-                  <Metric label={t.aiAnalysis.analyzedAt} value={formatDateTimeAZT(a.analyzedAt)} />
-                </div>
-
-                <p style={{ margin: "12px 0 0", fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                  {a.summary}
-                </p>
-                <div style={{ marginTop: 10, fontSize: 12, color: "var(--text-tertiary)" }}>
-                  Unconfirmed source hypothesis: {a.possibleSource} · {a.estimatedCause} — pending human review
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <IncidentDetailsPanel
-        incident={selected as Incident | null}
-        onClose={() => setSelectedId(null)}
-        expanded={expanded}
-        context="ai"
-      />
-
-      <style>{`
-        @media (max-width: 1100px) {
-          .ops-stat-grid, .ai-metrics, .ai-accuracy-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-        }
-      `}</style>
-    </>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-tertiary)" }}>
-        {label}
-      </div>
-      <div style={{ marginTop: 4, fontWeight: 600, fontSize: 14 }}>{value}</div>
-    </div>
-  );
+export default function AiAnalysisPage() { return <AppShell active="ai"><Suspense fallback={<DataState loading />}><AnalysisWorkspace /></Suspense></AppShell>; }
+function AnalysisWorkspace() {
+  const { lang, t } = useLanguage();
+  const { incidents, loading, error, refreshing, reloadIncidents, getIncidentById } = useIncidentStore();
+  const params = useSearchParams();
+  const selected = params.get("open") ? getIncidentById(params.get("open")!) ?? null : null;
+  const confidence = scanConfidence(incidents);
+  const outcomes = sarReviewOutcomes(incidents);
+  const pending = incidents.filter((i) => i.status === "detected" || (i.status === "under_review" && i.humanDecision !== "confirmed_spill"));
+  const queue = [...incidents].sort((a, b) => Number(pending.includes(b)) - Number(pending.includes(a)) || Date.parse(b.timestamp) - Date.parse(a.timestamp));
+  const labels = lang === "az" ? { outcomes: "SAR baxış nəticələri", scope: "Təsviri olan peyk aşkarlamalarının hazırkı statusu. Model dəqiqliyi ölçüsü deyil.", confidence: "Orta skan göstəricisi", scans: "Təsvirli SAR skanları", awaiting: "Qərar gözləyir", confirmed: "Təsdiqlənib", cleaning: "Təmizlənir", resolved: "Həll edilib", rejected: "Rədd edilib", recorded: "Qeydə alınıb", inspect: "Sübutlara bax", notMeasured: "Ölçülməyib", signals: "Detektor siqnalları", empty: "Hələ ölçülmüş SAR skanı yoxdur." } : { outcomes: "SAR review outcomes", scope: "Current review status of satellite detections with imagery. This is not a model accuracy metric.", confidence: "Average scan score", scans: "SAR scans with imagery", awaiting: "Awaiting decision", confirmed: "Confirmed", cleaning: "Cleaning", resolved: "Resolved", rejected: "Rejected", recorded: "Incident recorded", inspect: "Inspect evidence", notMeasured: "Not measured", signals: "Detector feature signals", empty: "No measured SAR scans yet." };
+  return <><div className="dashboard-scroll"><PageHeader title={t.aiAnalysis.title} subtitle={t.aiAnalysis.subtitle} actions={<Button busy={refreshing} onClick={() => void reloadIncidents()}><RefreshCw size={16} aria-hidden="true" />{t.common.refresh}</Button>} /><Notice><strong>{t.aiAnalysis.humanReviewRequired}</strong> {t.aiAnalysis.humanReviewBody}</Notice><section className="workspace-stats"><StatCard label={labels.scans} value={loading ? "—" : outcomes.total} icon={<Brain size={17} />} /><StatCard label={labels.confidence} value={confidence === null ? "—" : `${Math.round(confidence * 100)}%`} hint={lang === "az" ? "Yalnız təsvirli SAR skanları" : "Only SAR scans with imagery"} /><StatCard label={labels.awaiting} value={loading ? "—" : pending.length} accent="var(--color-med)" icon={<Clock size={17} />} /><StatCard label={labels.resolved} value={loading ? "—" : outcomes.resolved} icon={<ShieldCheck size={17} />} /></section>
+    <section className="panel panel-static"><header className="section-heading"><div><h2>{labels.outcomes}</h2><p>{labels.scope}</p></div></header><div className="analysis-outcomes">{outcomes.total ? (["pending", "confirmed", "cleaning", "resolved", "rejected"] as const).map((key) => <div key={key}><strong>{outcomes[key]}</strong><span>{key === "pending" ? labels.awaiting : labels[key]}</span></div>) : <p>{labels.empty}</p>}</div></section>
+    <section className="panel panel-static"><header className="section-heading"><div><h2>{t.aiAnalysis.queueTitle}</h2><p>{lang === "az" ? "Qərar gözləyən hadisələr əvvəl göstərilir." : "Incidents awaiting a decision are shown first."}</p></div></header><DataState loading={loading} error={!incidents.length ? error : null} empty={queue.length === 0} onRetry={() => void reloadIncidents()}><div className="analysis-queue">{queue.map((i) => <article key={i.id} className="analysis-card"><div className="record-card-header"><div><span className="provenance">{incidentProvenance(i, lang)}</span><h3>{i.displayId} · {i.title || i.location}</h3></div><div className="analysis-badges"><RiskBadge risk={i.risk} /><StatusBadge status={i.status} /></div></div><div className="analysis-measurements"><div><span>{t.incidentDetail.detectorScore}</span><strong>{isMeasuredScan(i) ? `${Math.round(i.aiProbability * 100)}%` : labels.notMeasured}</strong></div><div><span>{t.aiAnalysis.estimatedArea}</span><strong>{formatAreaM2(i.areaM2)}</strong></div><div><span>{labels.recorded}</span><strong>{formatWorkspaceTime(i.timestamp, lang)}</strong></div></div>{i.aiSummary && <p>{i.aiSummary}</p>}<Link className="ui-button" href={`/ai-analysis?open=${encodeURIComponent(i.id)}`} onClick={(e) => { if (!e.ctrlKey && !e.metaKey) { e.preventDefault(); setWorkspaceQuery({ open: i.id }, true); } }}>{labels.inspect}<ArrowRight size={15} aria-hidden="true" /></Link></article>)}</div></DataState></section>
+  </div><IncidentDetailsPanel incident={selected} expanded={params.get("wide") === "1"} context="ai" onClose={() => setWorkspaceQuery({ open: null, wide: null })} /></>;
 }

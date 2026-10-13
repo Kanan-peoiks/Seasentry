@@ -141,46 +141,6 @@ export function estimateSpillSource(
   };
 }
 
-const METERS_PER_DEG_LAT = 111_320;
-
-/**
- * Deterministic jagged polygon approximating a real slick outline instead of
- * a plain circle — same equivalent-circle radius as the reported area, with
- * per-vertex seeded noise and a mild elongation along the downwind bearing.
- */
-export function generateSlickPolygon(
-  lat: number,
-  lng: number,
-  areaM2: number,
-  seed: string,
-  downwindBearingDeg?: number
-): [number, number][] {
-  const baseRadiusM = Math.sqrt(areaM2 / Math.PI) * 3.2;
-  const vertexCount = 16;
-  const latRad = (lat * Math.PI) / 180;
-  const metersPerDegLng = METERS_PER_DEG_LAT * Math.cos(latRad);
-  const points: [number, number][] = [];
-
-  for (let i = 0; i < vertexCount; i++) {
-    const angleDeg = (360 / vertexCount) * i;
-    const noise = (hashString(`${seed}-v${i}`) % 100) / 100;
-    let radiusM = baseRadiusM * (0.62 + noise * 0.68);
-
-    if (downwindBearingDeg !== undefined) {
-      const diff = Math.abs(((angleDeg - downwindBearingDeg + 540) % 360) - 180);
-      const elongation = 1 + Math.max(0, (1 - diff / 90)) * 0.55;
-      radiusM *= elongation;
-    }
-
-    const angleRad = (angleDeg * Math.PI) / 180;
-    const dLat = (radiusM * Math.cos(angleRad)) / METERS_PER_DEG_LAT;
-    const dLng = (radiusM * Math.sin(angleRad)) / metersPerDegLng;
-    points.push([lat + dLat, lng + dLng]);
-  }
-
-  return points;
-}
-
 // ------------------------------------------------------------------
 // Response materials — built on the operational sorbent ratio.
 // ------------------------------------------------------------------
@@ -322,18 +282,6 @@ export function deriveProjectionSeries(incident: Incident): ProjectionPoint[] {
 
   return points;
 }
-
-export type CompanyShare = { name: string; pct: number };
-
-/** Fixed, per spec: unconfirmed attribution split shown as a pie chart. */
-export function deriveSourceAttribution(t: Translations): CompanyShare[] {
-  return [
-    { name: "SOCAR", pct: 85 },
-    { name: "BP", pct: 10 },
-    { name: t.charts.sourceOthers, pct: 5 },
-  ];
-}
-
 export type ResponseOption = { name: string; hours: number; costUsd: number };
 
 export function deriveResponseOptions(
@@ -357,41 +305,6 @@ export function deriveResponseOptions(
       name: t.charts.optionRapid,
       hours: Math.max(1, materials.durationHours - 3),
       costUsd: Math.round(materials.estimatedCostUsd * 1.6),
-    },
-  ];
-}
-
-export type MethodComparison = {
-  metric: string;
-  seaSentry: number;
-  traditional: number;
-  unit: string;
-};
-
-/** AI-assisted vs. traditional (manual patrol/reporting) response. */
-export function deriveMethodComparison(
-  incident: Incident,
-  materials: ResponseMaterials,
-  t: Translations
-): MethodComparison[] {
-  const seed = hashString(incident.id + "-method");
-  const seaSentryDetectHours = 1 + (seed % 3);
-  const traditionalDetectHours = seaSentryDetectHours * (6 + (seed % 5));
-  const spreadFactor = traditionalDetectHours / seaSentryDetectHours;
-  const traditionalCost = Math.round(materials.estimatedCostUsd * Math.min(3, 1 + spreadFactor * 0.25));
-
-  return [
-    {
-      metric: t.charts.metricDetectionToResponse,
-      seaSentry: seaSentryDetectHours,
-      traditional: traditionalDetectHours,
-      unit: "h",
-    },
-    {
-      metric: t.charts.metricTotalCost,
-      seaSentry: materials.estimatedCostUsd,
-      traditional: traditionalCost,
-      unit: "$",
     },
   ];
 }

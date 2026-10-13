@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { Search } from "lucide-react";
 
 export type FilterOption = { value: string; label: string };
@@ -8,6 +9,8 @@ type Props = {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
+  /** Visible label for the search field; defaults to the placeholder text. */
+  searchLabel?: string;
   filters?: {
     id: string;
     label: string;
@@ -18,93 +21,26 @@ type Props = {
   trailing?: React.ReactNode;
 };
 
-export default function FilterBar({
-  search,
-  onSearchChange,
-  searchPlaceholder = "Search…",
-  filters = [],
-  trailing,
-}: Props) {
-  const controlStyle: React.CSSProperties = {
-    background: "var(--bg-base)",
-    border: "1px solid var(--glass-border)",
-    borderRadius: 8,
-    color: "var(--text-primary)",
-    fontSize: 13,
-    padding: "8px 12px",
-    outline: "none",
-    fontFamily: "inherit",
-  };
-
+export default function FilterBar({ search, onSearchChange, searchPlaceholder = "Search…", searchLabel, filters = [], trailing }: Props) {
+  const id = useId();
   return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 10,
-        alignItems: "center",
-        padding: "12px 14px",
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--glass-border)",
-        borderRadius: 10,
-      }}
-    >
-      <div style={{ position: "relative", flex: "1 1 220px", minWidth: 180 }}>
-        <Search
-          size={14}
-          style={{
-            position: "absolute",
-            left: 12,
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "var(--text-tertiary)",
-            pointerEvents: "none",
-          }}
-        />
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={searchPlaceholder}
-          style={{
-            ...controlStyle,
-            width: "100%",
-            paddingLeft: 34,
-          }}
-        />
-      </div>
-
+    <div className="filter-bar" role="search">
+      <label className="filter-field filter-field--search" htmlFor={`${id}-search`}>
+        <span>{searchLabel ?? searchPlaceholder}</span>
+        <span className="filter-search">
+          <Search aria-hidden="true" size={16} />
+          <input id={`${id}-search`} type="search" name="search" autoComplete="off" spellCheck={false} value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder={searchPlaceholder} />
+        </span>
+      </label>
       {filters.map((f) => (
-        <label
-          key={f.id}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 12,
-            color: "var(--text-secondary)",
-          }}
-        >
-          <span style={{ whiteSpace: "nowrap" }}>{f.label}</span>
-          <select
-            value={f.value}
-            onChange={(e) => f.onChange(e.target.value)}
-            style={{
-              ...controlStyle,
-              minWidth: 130,
-              cursor: "pointer",
-            }}
-          >
-            {f.options.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
+        <label key={f.id} className="filter-field" htmlFor={`${id}-${f.id}`}>
+          <span>{f.label}</span>
+          <select id={`${id}-${f.id}`} name={f.id} value={f.value} onChange={(e) => f.onChange(e.target.value)}>
+            {f.options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
           </select>
         </label>
       ))}
-
-      {trailing && <div style={{ marginLeft: "auto" }}>{trailing}</div>}
+      {trailing && <div className="filter-trailing">{trailing}</div>}
     </div>
   );
 }

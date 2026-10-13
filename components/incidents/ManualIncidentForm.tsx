@@ -1,20 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 import type { Incident, SpillSource } from "@/lib/types";
 import { useIncidentStore, type ManualIncidentInput } from "@/lib/incident-store";
 import { useLanguage } from "@/lib/useLanguage";
+import Dialog from "@/components/ui/Dialog";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
 
 const RISK_OPTIONS: Incident["risk"][] = ["LOW", "MEDIUM", "HIGH"];
-const SPILL_SOURCE_OPTIONS: SpillSource[] = [
-  "Pipeline leak",
-  "Tanker discharge",
-  "Offshore platform",
-  "Port terminal",
-  "Illegal dumping",
-  "Unknown / natural seep",
-];
+const SPILL_SOURCE_OPTIONS: SpillSource[] = ["Pipeline leak", "Tanker discharge", "Offshore platform", "Port terminal", "Illegal dumping", "Unknown / natural seep"];
 
 type Props = {
   lat: number;
@@ -23,27 +18,11 @@ type Props = {
   onCreated: (incident: Incident) => void;
 };
 
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "9px 11px",
-  borderRadius: 8,
-  border: "1px solid var(--glass-border)",
-  background: "var(--bg-base)",
-  color: "var(--text-primary)",
-  fontSize: 13,
-  fontFamily: "inherit",
-  outline: "none",
-};
-
-const labelStyle: React.CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  color: "var(--text-secondary)",
-  marginBottom: 6,
-};
+type Errors = Partial<Record<"title" | "location" | "area", string>>;
 
 export default function ManualIncidentForm({ lat, lng, onClose, onCreated }: Props) {
   const { t } = useLanguage();
+  const f = t.manualIncidentForm;
   const { createIncident } = useIncidentStore();
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -53,14 +32,18 @@ export default function ManualIncidentForm({ lat, lng, onClose, onCreated }: Pro
   const [estimatedCause, setEstimatedCause] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !location.trim() || !areaM2 || Number(areaM2) <= 0) {
-      setError(t.manualIncidentForm.requiredFieldsError);
-      return;
-    }
+    if (submitting) return;
+    const next: Errors = {};
+    if (!title.trim()) next.title = f.titleRequired;
+    if (!location.trim()) next.location = f.locationRequired;
+    if (!(Number(areaM2) > 0)) next.area = f.areaRequired;
+    setErrors(next);
+    if (Object.keys(next).length) return;
     setError(null);
     setSubmitting(true);
 
@@ -78,7 +61,6 @@ export default function ManualIncidentForm({ lat, lng, onClose, onCreated }: Pro
 
     const result = await createIncident(input);
     setSubmitting(false);
-
     if (!result.ok) {
       setError(result.error);
       return;
@@ -86,166 +68,59 @@ export default function ManualIncidentForm({ lat, lng, onClose, onCreated }: Pro
     onCreated(result.incident);
   };
 
+  const invalid = (key: keyof Errors) => ({ "aria-invalid": !!errors[key], "aria-describedby": errors[key] ? `mi-${key}-error` : undefined });
+
   return (
-    <>
-      <div
-        onClick={submitting ? undefined : onClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1100 }}
-      />
-      <div
-        role="dialog"
-        aria-modal
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "min(480px, calc(100vw - 32px))",
-          maxHeight: "calc(100vh - 48px)",
-          overflowY: "auto",
-          background: "var(--bg-elevated)",
-          border: "1px solid var(--glass-border)",
-          borderRadius: 12,
-          padding: 24,
-          zIndex: 1101,
-        }}
-      >
-        <h2 style={{ margin: "0 0 4px", fontSize: 18 }}>{t.manualIncidentForm.title}</h2>
-        <p style={{ margin: "0 0 18px", color: "var(--text-secondary)", fontSize: 12.5 }}>
-          {t.manualIncidentForm.coordinatesCaptured(lat.toFixed(4), lng.toFixed(4))}
-        </p>
-
-        <form onSubmit={handleSubmit} style={{ display: "grid", gap: 14 }}>
-          <div>
-            <label style={labelStyle} htmlFor="mi-title">{t.manualIncidentForm.incidentTitle}</label>
-            <input
-              id="mi-title"
-              style={fieldStyle}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={t.manualIncidentForm.titlePlaceholder}
-            />
-          </div>
-
-          <div>
-            <label style={labelStyle} htmlFor="mi-location">{t.manualIncidentForm.locationName}</label>
-            <input
-              id="mi-location"
-              style={fieldStyle}
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder={t.manualIncidentForm.locationPlaceholder}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={labelStyle} htmlFor="mi-area">{t.manualIncidentForm.estimatedAreaM2}</label>
-              <input
-                id="mi-area"
-                type="number"
-                min={1}
-                style={fieldStyle}
-                value={areaM2}
-                onChange={(e) => setAreaM2(e.target.value)}
-                placeholder={t.manualIncidentForm.areaPlaceholder}
-              />
-            </div>
-            <div>
-              <label style={labelStyle} htmlFor="mi-risk">{t.manualIncidentForm.risk}</label>
-              <select
-                id="mi-risk"
-                style={fieldStyle}
-                value={risk}
-                onChange={(e) => setRisk(e.target.value as Incident["risk"])}
-              >
-                {RISK_OPTIONS.map((r) => (
-                  <option key={r} value={r}>{t.risk[r]}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label style={labelStyle} htmlFor="mi-source">{t.manualIncidentForm.suspectedSource}</label>
-            <select
-              id="mi-source"
-              style={fieldStyle}
-              value={spillSource}
-              onChange={(e) => setSpillSource(e.target.value as SpillSource)}
-            >
-              {SPILL_SOURCE_OPTIONS.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={labelStyle} htmlFor="mi-cause">{t.manualIncidentForm.estimatedCauseOptional}</label>
-            <input
-              id="mi-cause"
-              style={fieldStyle}
-              value={estimatedCause}
-              onChange={(e) => setEstimatedCause(e.target.value)}
-              placeholder={t.manualIncidentForm.causePlaceholder}
-            />
-          </div>
-
-          <div>
-            <label style={labelStyle} htmlFor="mi-notes">{t.manualIncidentForm.notesOptional}</label>
-            <textarea
-              id="mi-notes"
-              style={{ ...fieldStyle, resize: "vertical", minHeight: 60 }}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={t.manualIncidentForm.notesPlaceholder}
-            />
-          </div>
-
-          {error && <div className="auth-error" role="alert">{error}</div>}
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              style={{
-                flex: 1,
-                padding: "10px 14px",
-                borderRadius: 8,
-                border: "1px solid var(--glass-border)",
-                background: "transparent",
-                color: "var(--text-primary)",
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {t.manualIncidentForm.cancel}
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                flex: 1,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                padding: "10px 14px",
-                borderRadius: 8,
-                border: "none",
-                background: "var(--accent)",
-                color: "var(--bg-elevated)",
-                fontWeight: 650,
-                cursor: "pointer",
-                fontFamily: "inherit",
-              }}
-            >
-              {submitting ? <Loader2 size={16} className="spinner" /> : t.manualIncidentForm.createIncident}
-            </button>
-          </div>
-        </form>
-      </div>
-    </>
+    <Dialog
+      open
+      variant="center"
+      width={520}
+      title={f.title}
+      subtitle={f.coordinatesCaptured(lat.toFixed(4), lng.toFixed(4))}
+      onClose={() => { if (!submitting) onClose(); }}
+      footer={<>
+        <Button onClick={onClose} disabled={submitting}>{f.cancel}</Button>
+        <Button type="submit" form="manual-incident-form" variant="primary" busy={submitting}>{f.createIncident}</Button>
+      </>}
+    >
+      <form id="manual-incident-form" onSubmit={handleSubmit} className="form-grid" noValidate>
+        <label className="ui-field form-span">
+          {f.incidentTitle}
+          <input className="ui-input" name="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={f.titlePlaceholder} data-autofocus {...invalid("title")} />
+          {errors.title && <span id="mi-title-error" className="ui-field-error">{errors.title}</span>}
+        </label>
+        <label className="ui-field">
+          {f.locationName}
+          <input className="ui-input" name="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder={f.locationPlaceholder} {...invalid("location")} />
+          {errors.location && <span id="mi-location-error" className="ui-field-error">{errors.location}</span>}
+        </label>
+        <label className="ui-field">
+          {f.estimatedAreaM2}
+          <input className="ui-input" name="area" type="number" inputMode="decimal" min={1} value={areaM2} onChange={(e) => setAreaM2(e.target.value)} placeholder={f.areaPlaceholder} {...invalid("area")} />
+          {errors.area && <span id="mi-area-error" className="ui-field-error">{errors.area}</span>}
+        </label>
+        <label className="ui-field">
+          {f.risk}
+          <select className="ui-select" name="risk" value={risk} onChange={(e) => setRisk(e.target.value as Incident["risk"])}>
+            {RISK_OPTIONS.map((r) => <option key={r} value={r}>{t.risk[r]}</option>)}
+          </select>
+        </label>
+        <label className="ui-field">
+          {f.suspectedSource}
+          <select className="ui-select" name="source" value={spillSource} onChange={(e) => setSpillSource(e.target.value as SpillSource)}>
+            {SPILL_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{t.spillSource[s]}</option>)}
+          </select>
+        </label>
+        <label className="ui-field form-span">
+          {f.estimatedCauseOptional}
+          <input className="ui-input" name="cause" value={estimatedCause} onChange={(e) => setEstimatedCause(e.target.value)} placeholder={f.causePlaceholder} />
+        </label>
+        <label className="ui-field form-span">
+          {f.notesOptional}
+          <textarea className="ui-textarea" name="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={f.notesPlaceholder} />
+        </label>
+        {error && <div className="form-span"><Notice tone="error">{error}</Notice></div>}
+      </form>
+    </Dialog>
   );
 }

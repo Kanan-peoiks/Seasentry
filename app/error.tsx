@@ -1,118 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import Button from "@/components/ui/Button";
+import { useLanguage } from "@/lib/useLanguage";
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const { lang } = useLanguage();
   useEffect(() => {
     console.error(error);
   }, [error]);
 
+  const az = lang === "az";
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        background: "var(--bg-base)",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 420,
-          width: "100%",
-          textAlign: "center",
-          background: "var(--bg-elevated)",
-          border: "1px solid var(--glass-border)",
-          borderRadius: 12,
-          padding: "32px 28px",
-        }}
-      >
-        <div
-          style={{
-            width: 48,
-            height: 48,
-            margin: "0 auto 16px",
-            borderRadius: "50%",
-            background: "rgba(224, 122, 95, 0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#C1503A",
-          }}
-        >
-          <AlertTriangle size={22} strokeWidth={2} />
-        </div>
-        <h1
-          style={{
-            fontSize: 18,
-            fontWeight: 650,
-            color: "var(--text-primary)",
-            margin: "0 0 8px",
-          }}
-        >
-          Something went wrong
-        </h1>
-        <p
-          style={{
-            fontSize: 13,
-            color: "var(--text-secondary)",
-            lineHeight: 1.55,
-            margin: "0 0 24px",
-          }}
-        >
-          This section of SeaSentry hit an unexpected error. You can try again, or head back to the
-          dashboard.
-        </p>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-          <button
-            type="button"
-            onClick={reset}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              background: "var(--accent)",
-              color: "var(--bg-elevated)",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 16px",
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            <RotateCcw size={14} />
-            Try again
-          </button>
-          <a
-            href="/dashboard"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              background: "transparent",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--glass-border)",
-              borderRadius: 8,
-              padding: "10px 16px",
-              fontWeight: 600,
-              fontSize: 13,
-              textDecoration: "none",
-              fontFamily: "inherit",
-            }}
-          >
-            Back to dashboard
-          </a>
-        </div>
+    <div className="session-gate error-page" role="alert">
+      <AlertTriangle size={28} aria-hidden="true" />
+      <h1>{az ? "Gözlənilməz xəta baş verdi" : "Something went wrong"}</h1>
+      <p>{az ? "SeaSentry-nin bu bölməsində xəta oldu. Yenidən cəhd edin və ya idarə panelinə qayıdın." : "This section of SeaSentry hit an unexpected error. Try again, or go back to the dashboard."}</p>
+      <div className="error-actions">
+        <Button variant="primary" onClick={reset}><RotateCcw size={16} aria-hidden="true" />{az ? "Yenidən cəhd et" : "Try again"}</Button>
+        <Link className="ui-button" href="/dashboard">{az ? "İdarə panelinə qayıt" : "Back to dashboard"}</Link>
       </div>
     </div>
   );

@@ -1,141 +1,66 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { jsPDF } from "jspdf";
+import { useCallback, useEffect, useState } from "react";
+import { CheckCircle2, Droplets, Eye, FileBarChart, FileDown, FileSpreadsheet, History, Maximize2, Percent, RefreshCw, Satellite, ShieldAlert } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
+import DataState from "@/components/ui/DataState";
+import Dialog from "@/components/ui/Dialog";
 import { useIncidentStore } from "@/lib/incident-store";
-import { formatAreaM2, formatDateTimeAZT } from "@/lib/mock-data";
+import { formatAreaM2 } from "@/lib/mock-data";
 import { useLanguage } from "@/lib/useLanguage";
-import type { Translations } from "@/lib/i18n";
-import {
-  FileBarChart,
-  Maximize2,
-  Droplets,
-  ShieldAlert,
-  Percent,
-  CheckCircle2,
-  Download,
-  History,
-  FileSpreadsheet,
-  FileText,
-  Satellite,
-  X,
-  Loader2,
-  FileDown,
-} from "lucide-react";
+import { formatWorkspaceTime } from "@/lib/workspace-url";
+import { downloadOverviewCsv, downloadOverviewPdf, downloadScanPdf, type SavedReport, type ScanLog } from "@/lib/reports";
 
-type SavedReport = {
-  id: string;
-  incidentId: string;
-  incidentDisplayId: string;
-  incidentTitle: string;
-  team: string;
-  estimatedCostUsd: number;
-  generatedBy: string;
-  generatedAt: string;
-};
+type Remote<T> = { status: "loading" } | { status: "error"; message: string } | { status: "ok"; rows: T[] };
 
-type ScanLog = {
-  id: string;
-  lat: number;
-  lng: number;
-  fromDate?: string | null;
-  toDate?: string | null;
-  createdAt: string;
-  found: boolean;
-  aiProbability: number;
-  areaM2: number;
-  sarImageBase64?: string | null;
-  incidentId?: string | null;
-  requestedBy?: string | null;
-};
-
-/** Self-contained PDF for a single satellite scan — everything shown in the
- * lightbox, works for both found and not-found scans (unlike
- * IncidentDetailsPanel's generateIncidentPdf, which needs a real incident
- * with response-materials data). `linkedIncidentDisplayId` is resolved by
- * the caller (reports/page.tsx already holds the full incident list) since
- * ScanLog only carries the incident's id, not its display id. */
-function generateScanLogPdf(
-  scan: ScanLog,
-  place: string | null,
-  t: Translations,
-  linkedIncidentDisplayId: string | null
-) {
-  const doc = new jsPDF();
-  let y = 20;
-  const line = (text: string, size = 11, bold = false, gap = 7) => {
-    doc.setFontSize(size);
-    doc.setFont("helvetica", bold ? "bold" : "normal");
-    doc.text(text, 14, y);
-    y += gap;
+function useRemoteList<T>(url: string, failMessage: string) {
+  const [state, setState] = useState<Remote<T>>({ status: "loading" });
+  const load = useCallback(() => {
+    const controller = new AbortController();
+    fetch(url, { cache: "no-store", signal: controller.signal })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(failMessage);
+        const data: unknown = await res.json();
+        setState({ status: "ok", rows: Array.isArray(data) ? (data as T[]) : [] });
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setState({ status: "error", message: error instanceof Error && error.message !== "Failed to fetch" ? error.message : failMessage });
+      });
+    return controller;
+  }, [url, failMessage]);
+  useEffect(() => {
+    const controller = load();
+    return () => controller.abort();
+  }, [load]);
+  const retry = () => {
+    setState({ status: "loading" });
+    load();
   };
-  const ensureSpace = (needed = 12) => {
-    if (y + needed > 275) {
-      doc.addPage();
-      y = 20;
-    }
-  };
+  return [state, retry] as const;
+}
 
-  line("SeaSentry — Satellite Scan Report", 18, true, 10);
-  doc.setDrawColor(200);
-  doc.line(14, y - 4, 196, y - 4);
-  y += 2;
-
-  const coordsLine = `${scan.lat.toFixed(4)}°N, ${scan.lng.toFixed(4)}°E${place ? ` (${place})` : ""}`;
-  line(`Coordinates: ${coordsLine}`, 12, true, 8);
-  line(`Scanned at: ${formatDateTimeAZT(scan.createdAt)} AZT`);
-  line(
-    `Search window: ${scan.fromDate && scan.toDate ? `${scan.fromDate} to ${scan.toDate}` : t.reports.scanDefaultWindow}`
-  );
-  line(`Requested by: ${scan.requestedBy || "—"}`);
-  y += 2;
-
-  ensureSpace(24);
-  line("Result", 13, true, 8);
-  if (scan.found) {
-    line(`Anomaly detected — confidence ${Math.round(scan.aiProbability * 100)}%`);
-    line(`Estimated area: ${formatAreaM2(scan.areaM2)}`);
-  } else {
-    line("No anomaly cleared the confirmation threshold in the fetched imagery.");
-  }
-  line(
-    linkedIncidentDisplayId
-      ? `Linked incident: ${linkedIncidentDisplayId} — see the incident record for the full AI/response breakdown.`
-      : "No incident was created from this scan."
-  );
-  y += 4;
-
-  ensureSpace(scan.sarImageBase64 ? 110 : 24);
-  line("Satellite imagery", 13, true, 8);
-  if (scan.sarImageBase64) {
-    const imgW = 150;
-    const imgH = 150;
-    try {
-      doc.addImage(`data:image/png;base64,${scan.sarImageBase64}`, "PNG", 14, y, imgW, imgH);
-      y += imgH + 3;
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "italic");
-      doc.text("Real Sentinel-1 SAR tile (VV/VH/contrast, false-color)", 14, y);
-      y += 6;
-    } catch {
-      doc.setFontSize(9);
-      doc.text("[Satellite image failed to embed.]", 14, y);
-      y += 6;
-    }
-  }
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "italic");
-  doc.text(
-    "Generated by SeaSentry — an oil-spill intelligence platform. Every field above is a real value from this scan.",
-    14,
-    290
-  );
-
-  doc.save(`seasentry-scan-${scan.id.slice(0, 8)}-report.pdf`);
+/** Reverse-geocodes a scan location via Nominatim; keyed by scan id so a
+ * late answer for a previous scan is ignored. */
+function usePlaceName(scan: ScanLog | null) {
+  const [place, setPlace] = useState<{ id: string; label: string | null } | null>(null);
+  useEffect(() => {
+    if (!scan) return;
+    const controller = new AbortController();
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${scan.lat}&lon=${scan.lng}&zoom=10&addressdetails=1`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const a = data?.address || {};
+        const name = a.city || a.town || a.village || a.county || a.state || null;
+        setPlace({ id: scan.id, label: [name, a.country].filter(Boolean).join(", ") || data?.display_name || null });
+      })
+      .catch(() => { if (!controller.signal.aborted) setPlace({ id: scan.id, label: null }); });
+    return () => controller.abort();
+  }, [scan]);
+  return scan && place?.id === scan.id ? place.label : null;
 }
 
 export default function ReportsPage() {
@@ -147,709 +72,205 @@ export default function ReportsPage() {
 }
 
 function ReportsContent() {
-  const { t } = useLanguage();
-  const { report, incidents, stats } = useIncidentStore();
+  const { t, lang } = useLanguage();
+  const r = t.reports;
+  const { report, incidents, stats, loading } = useIncidentStore();
+  const [history, retryHistory] = useRemoteList<SavedReport>("/api/reports", r.historyFailed);
+  const [scans, retryScans] = useRemoteList<ScanLog>("/api/detect/history", r.scansFailed);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
-  const [reportsLoading, setReportsLoading] = useState(true);
-  const [scanLogs, setScanLogs] = useState<ScanLog[]>([]);
-  const [scanLogsLoading, setScanLogsLoading] = useState(true);
-  const [expandedScan, setExpandedScan] = useState<ScanLog | null>(null);
-  const [expandedScanPlace, setExpandedScanPlace] = useState<string | null>(null);
-  const [scanPdfState, setScanPdfState] = useState<"idle" | "generating" | "ready">("idle");
+  const [exporting, setExporting] = useState<"pdf" | null>(null);
+  const [exportError, setExportError] = useState(false);
+  const [openScan, setOpenScan] = useState<ScanLog | null>(null);
+  const [scanPdf, setScanPdf] = useState<{ id: string; state: "generating" | "ready" | "error" } | null>(null);
+  const place = usePlaceName(openScan);
 
-  useEffect(() => {
-    setScanPdfState("idle");
-    if (!expandedScan) {
-      setExpandedScanPlace(null);
-      return;
-    }
-    let cancelled = false;
-    setExpandedScanPlace(null);
-    // Reverse-geocode via Nominatim (OpenStreetMap) so the reviewer sees a
-    // real place name, not just raw coordinates — the browser's own Referer
-    // header satisfies Nominatim's usage policy for client-side apps.
-    fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${expandedScan.lat}&lon=${expandedScan.lng}&zoom=10&addressdetails=1`
-    )
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (cancelled || !data) return;
-        const a = data.address || {};
-        const place = a.city || a.town || a.village || a.county || a.state || null;
-        const label = [place, a.country].filter(Boolean).join(", ");
-        setExpandedScanPlace(label || data.display_name || null);
-      })
-      .catch(() => {
-        if (!cancelled) setExpandedScanPlace(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [expandedScan?.id]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/reports", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (!cancelled) setSavedReports(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setReportsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/detect/history", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (!cancelled) setScanLogs(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setScanLogsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const riskDist = {
+  const historyRows = history.status === "ok" ? history.rows : [];
+  const risk = {
     HIGH: incidents.filter((i) => i.risk === "HIGH").length,
     MEDIUM: incidents.filter((i) => i.risk === "MEDIUM").length,
     LOW: incidents.filter((i) => i.risk === "LOW").length,
   };
+  const score = report.averageAiConfidence === null ? t.incidentDetail.notMeasured : `${report.averageAiConfidence}%`;
 
-  // Both exports below are fleet-wide aggregate stats only (counts, areas,
-  // risk mix, report history) — not the per-incident AI/satellite/drift
-  // narrative. See IncidentDetailsPanel.tsx's generateIncidentPdf for that
-  // template and its data-source notes.
-  const exportCsv = () => {
-    const csvEscape = (value: string | number) => {
-      const s = String(value);
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines: string[] = [
-      "SeaSentry Reports Overview",
-      "",
-      "Metric,Value",
-      `Total Incidents,${report.totalIncidents}`,
-      `Total Detected Area (m2),${report.totalDetectedAreaM2}`,
-      `Total Cleaned Area (m2),${report.totalCleanedAreaM2}`,
-      `High-Risk Incidents,${report.highRiskCount}`,
-      `Average AI Confidence (%),${report.averageAiConfidence}`,
-      `Resolved Incidents,${report.resolvedCount}`,
-      "",
-      "Risk,Count",
-      ...(["HIGH", "MEDIUM", "LOW"] as const).map((level) => `${level},${riskDist[level]}`),
-      "",
-      "Incident,Team,Cost (USD),Generated By,Generated At",
-      ...savedReports.map((r) =>
-        [
-          csvEscape(`${r.incidentDisplayId} - ${r.incidentTitle}`),
-          csvEscape(r.team),
-          r.estimatedCostUsd,
-          csvEscape(r.generatedBy),
-          csvEscape(`${formatDateTimeAZT(r.generatedAt)} AZT`),
-        ].join(",")
-      ),
-    ];
-
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `seasentry-reports-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportPdf = () => {
-    const doc = new jsPDF();
-    let y = 20;
-    const line = (text: string, size = 11, bold = false, gap = 7) => {
-      doc.setFontSize(size);
-      doc.setFont("helvetica", bold ? "bold" : "normal");
-      doc.text(text, 14, y);
-      y += gap;
-    };
-    const ensureSpace = (needed = 12) => {
-      if (y + needed > 280) {
-        doc.addPage();
-        y = 20;
-      }
-    };
-
-    line("SeaSentry — Operational Reports Overview", 18, true, 10);
-    doc.setDrawColor(200);
-    doc.line(14, y - 4, 196, y - 4);
-    y += 2;
-    line(`Generated: ${formatDateTimeAZT(new Date().toISOString())} AZT`, 10);
-    y += 4;
-
-    line("Summary", 13, true, 8);
-    line(`Total incidents: ${report.totalIncidents}`);
-    line(`Detected area: ${formatAreaM2(report.totalDetectedAreaM2)}`);
-    line(`Cleaned area: ${formatAreaM2(report.totalCleanedAreaM2)}`);
-    line(`High-risk incidents: ${report.highRiskCount}`);
-    line(`Average AI confidence: ${report.averageAiConfidence}%`);
-    line(`Resolved incidents: ${report.resolvedCount}`);
-    y += 4;
-
-    line("Risk distribution", 13, true, 8);
-    (["HIGH", "MEDIUM", "LOW"] as const).forEach((level) => {
-      const count = riskDist[level];
-      const pct = report.totalIncidents ? Math.round((count / report.totalIncidents) * 100) : 0;
-      line(`${level}: ${count} (${pct}%)`);
-    });
-    y += 4;
-
-    line("Report history", 13, true, 8);
-    if (savedReports.length === 0) {
-      line("No reports generated yet.");
-    } else {
-      savedReports.forEach((r) => {
-        ensureSpace();
-        line(`${r.incidentDisplayId} · ${r.incidentTitle}`, 10, true, 5);
-        line(
-          `  ${r.team} · $${r.estimatedCostUsd.toLocaleString("en-US")} · ${r.generatedBy} · ${formatDateTimeAZT(r.generatedAt)} AZT`,
-          9,
-          false,
-          7
-        );
-      });
+  const exportPdf = async () => {
+    setExporting("pdf");
+    setExportError(false);
+    try {
+      await downloadOverviewPdf(report, risk, historyRows, t, lang);
+    } catch {
+      setExportError(true);
+    } finally {
+      setExporting(null);
     }
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "italic");
-    doc.text(
-      "Demo document generated by SeaSentry — an oil-spill intelligence platform. Figures are simulated.",
-      14,
-      290
-    );
-
-    doc.save(`seasentry-reports-overview-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  return (
+  const generateScanPdf = async (scan: ScanLog) => {
+    setScanPdf({ id: scan.id, state: "generating" });
+    const linked = scan.incidentId ? incidents.find((i) => i.id === scan.incidentId)?.displayId ?? scan.incidentId : null;
+    try {
+      await downloadScanPdf(scan, place, linked, t, lang);
+      setScanPdf({ id: scan.id, state: "ready" });
+    } catch {
+      setScanPdf({ id: scan.id, state: "error" });
+    }
+  };
+
+  const scanPdfState = openScan && scanPdf?.id === openScan.id ? scanPdf.state : null;
+  const exportButtons = (
     <>
-      <div className="dashboard-scroll">
-        <PageHeader
-          title={t.reports.title}
-          subtitle={t.reports.subtitle}
-          actions={
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={exportCsv}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "transparent",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--glass-border)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontWeight: 650,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <FileSpreadsheet size={15} /> {t.reports.exportCsv}
-              </button>
-              <button
-                type="button"
-                onClick={exportPdf}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "transparent",
-                  color: "var(--text-primary)",
-                  border: "1px solid var(--glass-border)",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontWeight: 650,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <FileText size={15} /> {t.reports.exportPdf}
-              </button>
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 8,
-                  background: "var(--accent)",
-                  color: "var(--bg-elevated)",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "10px 14px",
-                  fontWeight: 650,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <Download size={15} /> {t.reports.generateReport}
-              </button>
-            </div>
-          }
-        />
-
-        <section
-          style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 12 }}
-          className="report-stat-grid"
-        >
-          <StatCard label={t.reports.totalIncidents} value={report.totalIncidents} icon={<FileBarChart size={15} />} />
-          <StatCard
-            label={t.reports.totalDetectedArea}
-            value={formatAreaM2(report.totalDetectedAreaM2)}
-            icon={<Maximize2 size={15} />}
-          />
-          <StatCard
-            label={t.reports.totalCleanedArea}
-            value={formatAreaM2(report.totalCleanedAreaM2)}
-            accent="var(--color-low)"
-            icon={<Droplets size={15} />}
-          />
-          <StatCard
-            label={t.reports.highRiskIncidents}
-            value={report.highRiskCount}
-            accent="var(--color-med)"
-            icon={<ShieldAlert size={15} />}
-          />
-          <StatCard
-            label={t.reports.averageAiConfidence}
-            value={`${report.averageAiConfidence}%`}
-            accent="var(--accent)"
-            icon={<Percent size={15} />}
-          />
-          <StatCard
-            label={t.reports.resolvedIncidents}
-            value={report.resolvedCount}
-            accent="var(--color-low)"
-            icon={<CheckCircle2 size={15} />}
-          />
-        </section>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 16 }} className="report-panels">
-          <div className="panel panel-static">
-            <div className="panel-header">
-              <span className="panel-title">{t.reports.operationalSnapshot}</span>
-            </div>
-            <div className="panel-body" style={{ padding: 16, display: "grid", gap: 12 }}>
-              <Row label={t.reports.activeIncidents} value={String(stats.active)} />
-              <Row label={t.reports.underReview} value={String(stats.underReview)} />
-              <Row label={t.reports.resolved} value={String(stats.resolved)} />
-              <Row label={t.reports.avgResponseLatency} value={`${report.avgResponseTimeMin} min`} />
-              <Row label={t.reports.datasetScope} value={t.reports.datasetScopeValue} />
-            </div>
-          </div>
-
-          <div className="panel panel-static">
-            <div className="panel-header">
-              <span className="panel-title">{t.reports.riskDistribution}</span>
-            </div>
-            <div className="panel-body" style={{ padding: 16, display: "grid", gap: 14 }}>
-              {(["HIGH", "MEDIUM", "LOW"] as const).map((level) => {
-                const count = riskDist[level];
-                const pct = report.totalIncidents
-                  ? Math.round((count / report.totalIncidents) * 100)
-                  : 0;
-                const color =
-                  level === "HIGH"
-                    ? "var(--color-high)"
-                    : level === "MEDIUM"
-                      ? "var(--color-med)"
-                      : "var(--color-low)";
-                return (
-                  <div key={level}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-                      <span>{t.risk[level]}</span>
-                      <span style={{ color: "var(--text-secondary)" }}>
-                        {count} ({pct}%)
-                      </span>
-                    </div>
-                    <div style={{ height: 8, borderRadius: 4, background: "rgba(43,45,66,0.08)" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", borderRadius: 4, background: color }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="panel panel-static" style={{ marginTop: 16 }}>
-          <div className="panel-header">
-            <span className="panel-title">
-              <History size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-              {t.reports.reportHistory}
-            </span>
-            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-              {reportsLoading ? t.common.loading : t.reports.generatedCount(savedReports.length)}
-            </span>
-          </div>
-          <div className="panel-body" style={{ overflowX: "auto" }}>
-            {!reportsLoading && savedReports.length === 0 ? (
-              <div style={{ padding: 20, fontSize: 13, color: "var(--text-secondary)" }}>
-                {t.reports.noReportsYet}
-              </div>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--text-tertiary)", fontSize: 11 }}>
-                    <th style={{ padding: "8px 12px" }}>{t.reports.colIncident}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.reports.colTeam}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.reports.colCost}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.reports.colGeneratedBy}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.reports.colGeneratedAt}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {savedReports.map((r) => (
-                    <tr key={r.id} style={{ borderTop: "1px solid var(--border-muted)" }}>
-                      <td style={{ padding: "10px 12px" }}>
-                        {r.incidentDisplayId} · {r.incidentTitle}
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>{r.team}</td>
-                      <td style={{ padding: "10px 12px" }}>${r.estimatedCostUsd.toLocaleString("en-US")}</td>
-                      <td style={{ padding: "10px 12px" }}>{r.generatedBy}</td>
-                      <td style={{ padding: "10px 12px" }}>{formatDateTimeAZT(r.generatedAt)} AZT</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-
-        <div className="panel panel-static" style={{ marginTop: 16 }}>
-          <div className="panel-header">
-            <span className="panel-title">
-              <Satellite size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-              {t.reports.scanHistory}
-            </span>
-            <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-              {scanLogsLoading ? t.common.loading : t.reports.scanCount(scanLogs.length)}
-            </span>
-          </div>
-          <div className="panel-body">
-            <p style={{ margin: "0 0 14px", fontSize: 11.5, color: "var(--text-tertiary)" }}>
-              {t.reports.scanHistoryHint}
-            </p>
-            {!scanLogsLoading && scanLogs.length === 0 ? (
-              <div style={{ padding: "8px 0 20px", fontSize: 13, color: "var(--text-secondary)" }}>
-                {t.reports.noScansYet}
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                  gap: 12,
-                }}
-              >
-                {scanLogs.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setExpandedScan(s)}
-                    style={{
-                      display: "block",
-                      textAlign: "left",
-                      padding: 0,
-                      border: "1px solid var(--glass-border)",
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      background: "var(--surface-muted)",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {s.sarImageBase64 ? (
-                      <img
-                        src={`data:image/png;base64,${s.sarImageBase64}`}
-                        alt=""
-                        style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: "100%",
-                          height: 100,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "var(--text-tertiary)",
-                        }}
-                      >
-                        <Satellite size={20} />
-                      </div>
-                    )}
-                    <div style={{ padding: "8px 10px" }}>
-                      <div
-                        style={{
-                          display: "inline-block",
-                          fontSize: 9,
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          marginBottom: 4,
-                          color: s.found ? "var(--color-high-text)" : "var(--text-secondary)",
-                          background: s.found ? "rgba(224,122,95,0.12)" : "var(--bg-base)",
-                        }}
-                      >
-                        {s.found ? t.reports.scanFound(Math.round(s.aiProbability * 100)) : t.reports.scanNotFound}
-                      </div>
-                      <div style={{ fontSize: 11, fontFamily: "ui-monospace, monospace", color: "var(--text-primary)" }}>
-                        {s.lat.toFixed(3)}°N, {s.lng.toFixed(3)}°E
-                      </div>
-                      <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 2 }}>
-                        {formatDateTimeAZT(s.createdAt)} AZT
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {expandedScan && (
-          <>
-            <div
-              onClick={() => setExpandedScan(null)}
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100 }}
-            />
-            <div
-              role="dialog"
-              style={{
-                position: "fixed",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "min(420px, calc(100vw - 32px))",
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--glass-border)",
-                borderRadius: 12,
-                padding: 20,
-                zIndex: 101,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-                <button
-                  type="button"
-                  onClick={() => setExpandedScan(null)}
-                  aria-label={t.common.close}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 8,
-                    border: "1px solid var(--glass-border)",
-                    background: "var(--surface-muted)",
-                    color: "var(--text-primary)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                  }}
-                >
-                  <X size={18} strokeWidth={2.25} />
-                </button>
-              </div>
-              {expandedScan.sarImageBase64 && (
-                <img
-                  src={`data:image/png;base64,${expandedScan.sarImageBase64}`}
-                  alt=""
-                  style={{
-                    display: "block",
-                    width: 220,
-                    maxWidth: "100%",
-                    margin: "0 auto 14px",
-                    borderRadius: 8,
-                  }}
-                />
-              )}
-              <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
-                <Row
-                  label={t.reports.scanCoordinates}
-                  value={`${expandedScan.lat.toFixed(4)}°N, ${expandedScan.lng.toFixed(4)}°E${
-                    expandedScanPlace ? ` (${expandedScanPlace})` : ""
-                  }`}
-                />
-                <Row label={t.reports.scanWhen} value={`${formatDateTimeAZT(expandedScan.createdAt)} AZT`} />
-                <Row
-                  label={t.reports.scanSearchWindow}
-                  value={
-                    expandedScan.fromDate && expandedScan.toDate
-                      ? `${expandedScan.fromDate} → ${expandedScan.toDate}`
-                      : t.reports.scanDefaultWindow
-                  }
-                />
-                <Row
-                  label={t.reports.scanResult}
-                  value={
-                    expandedScan.found
-                      ? t.reports.scanFound(Math.round(expandedScan.aiProbability * 100))
-                      : t.reports.scanNotFound
-                  }
-                />
-                {expandedScan.found && (
-                  <Row label={t.reports.scanArea} value={formatAreaM2(expandedScan.areaM2)} />
-                )}
-                {expandedScan.requestedBy && <Row label={t.reports.scanRequestedBy} value={expandedScan.requestedBy} />}
-                <Row
-                  label={t.reports.scanLinkedIncident}
-                  value={
-                    expandedScan.incidentId
-                      ? incidents.find((i) => i.id === expandedScan.incidentId)?.displayId || expandedScan.incidentId
-                      : t.reports.scanNoIncident
-                  }
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={scanPdfState !== "idle"}
-                onClick={() => {
-                  setScanPdfState("generating");
-                  setTimeout(() => {
-                    generateScanLogPdf(
-                      expandedScan,
-                      expandedScanPlace,
-                      t,
-                      (expandedScan.incidentId &&
-                        incidents.find((i) => i.id === expandedScan.incidentId)?.displayId) ||
-                        null
-                    );
-                    setScanPdfState("ready");
-                  }, 600);
-                }}
-                style={{
-                  width: "100%",
-                  marginTop: 16,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  padding: "10px 14px",
-                  borderRadius: 8,
-                  border: "1px solid var(--glass-border)",
-                  background: scanPdfState === "ready" ? "var(--accent-soft)" : "var(--surface-muted)",
-                  color: scanPdfState === "ready" ? "var(--accent)" : "var(--text-primary)",
-                  cursor: scanPdfState === "idle" ? "pointer" : "default",
-                  fontFamily: "inherit",
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                {scanPdfState === "generating" ? (
-                  <Loader2 size={14} className="spinner" />
-                ) : scanPdfState === "ready" ? (
-                  <CheckCircle2 size={14} />
-                ) : (
-                  <FileDown size={14} />
-                )}
-                {scanPdfState === "idle" && t.incidentDetail.generatePdfReport}
-                {scanPdfState === "generating" && t.incidentDetail.generatingLabel}
-                {scanPdfState === "ready" && t.incidentDetail.downloadedGenerateAgain}
-              </button>
-            </div>
-          </>
-        )}
-
-        {previewOpen && (
-          <>
-            <div
-              onClick={() => setPreviewOpen(false)}
-              style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 80 }}
-            />
-            <div
-              role="dialog"
-              style={{
-                position: "fixed",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "min(520px, calc(100vw - 32px))",
-                background: "var(--bg-elevated)",
-                border: "1px solid var(--glass-border)",
-                borderRadius: 12,
-                padding: 24,
-                zIndex: 90,
-              }}
-            >
-              <h2 style={{ margin: "0 0 8px", fontSize: 18 }}>{t.reports.previewTitle}</h2>
-              <p style={{ margin: "0 0 16px", color: "var(--text-secondary)", fontSize: 13, lineHeight: 1.5 }}>
-                {t.reports.previewBody}
-              </p>
-              <div style={{ display: "grid", gap: 8, fontSize: 13, marginBottom: 18 }}>
-                <Row label={t.reports.totalIncidents} value={String(report.totalIncidents)} />
-                <Row label={t.reports.detectedArea} value={formatAreaM2(report.totalDetectedAreaM2)} />
-                <Row label={t.reports.cleanedArea} value={formatAreaM2(report.totalCleanedAreaM2)} />
-                <Row label={t.reports.avgAiConfidence} value={`${report.averageAiConfidence}%`} />
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewOpen(false)}
-                style={{
-                  width: "100%",
-                  padding: "10px 14px",
-                  borderRadius: 8,
-                  border: "1px solid var(--glass-border)",
-                  background: "transparent",
-                  color: "var(--text-primary)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t.reports.close}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      <style>{`
-        @media (max-width: 1000px) {
-          .report-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .report-panels { grid-template-columns: 1fr !important; }
-        }
-      `}</style>
+      <Button onClick={() => downloadOverviewCsv(report, risk, historyRows, t, lang)} disabled={loading}><FileSpreadsheet size={16} aria-hidden="true" />{r.exportCsv}</Button>
+      <Button variant="primary" onClick={() => void exportPdf()} busy={exporting === "pdf"} disabled={loading}><FileDown size={16} aria-hidden="true" />{r.exportPdf}</Button>
     </>
   );
-}
 
-function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "8px 0",
-        borderBottom: "1px solid var(--border-muted)",
-      }}
-    >
-      <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>{label}</span>
-      <span style={{ fontWeight: 600, fontSize: 13 }}>{value}</span>
+    <div className="dashboard-scroll">
+      <PageHeader title={r.title} subtitle={r.subtitle} actions={<><Button onClick={() => setPreviewOpen(true)} disabled={loading}><Eye size={16} aria-hidden="true" />{r.previewSummary}</Button>{exportButtons}</>} />
+      {exportError && <Notice tone="error" action={<Button onClick={() => void exportPdf()}>{t.session.retry}</Button>}>{t.pdf.failed}</Notice>}
+
+      <section className="workspace-stats workspace-stats--six" aria-label={r.title}>
+        <StatCard label={r.totalIncidents} value={loading ? "—" : report.totalIncidents} icon={<FileBarChart size={17} />} />
+        <StatCard label={r.totalDetectedArea} value={loading ? "—" : formatAreaM2(report.totalDetectedAreaM2)} hint={r.areaHint} icon={<Maximize2 size={17} />} />
+        <StatCard label={r.totalCleanedArea} value={loading ? "—" : formatAreaM2(report.totalCleanedAreaM2)} hint={r.cleanedHint} accent="var(--color-low)" icon={<Droplets size={17} />} />
+        <StatCard label={r.highRiskIncidents} value={loading ? "—" : report.highRiskCount} accent="var(--color-high)" icon={<ShieldAlert size={17} />} />
+        <StatCard label={r.averageAiConfidence} value={loading ? "—" : score} hint={r.scoreHint} icon={<Percent size={17} />} />
+        <StatCard label={r.resolvedIncidents} value={loading ? "—" : report.resolvedCount} accent="var(--success)" icon={<CheckCircle2 size={17} />} />
+      </section>
+
+      <div className="report-panels">
+        <section className="panel panel-static" aria-labelledby="snapshot-title">
+          <header className="section-heading"><div><h2 id="snapshot-title">{r.operationalSnapshot}</h2></div></header>
+          <dl className="summary-list">
+            <div><dt>{r.activeIncidents}</dt><dd>{stats.active}</dd></div>
+            <div><dt>{r.underReview}</dt><dd>{stats.underReview}</dd></div>
+            <div><dt>{r.resolved}</dt><dd>{stats.resolved}</dd></div>
+            <div><dt>{r.datasetScope}</dt><dd>{r.datasetScopeValue}</dd></div>
+          </dl>
+        </section>
+        <section className="panel panel-static" aria-labelledby="risk-title">
+          <header className="section-heading"><div><h2 id="risk-title">{r.riskDistribution}</h2></div></header>
+          <div className="risk-bars">
+            {(["HIGH", "MEDIUM", "LOW"] as const).map((level) => {
+              const pct = report.totalIncidents ? Math.round((risk[level] / report.totalIncidents) * 100) : 0;
+              return (
+                <div key={level} className="risk-bar">
+                  <div className="risk-bar-label"><span>{t.risk[level]}</span><span>{risk[level]} ({pct}%)</span></div>
+                  <div className="risk-bar-track" role="img" aria-label={`${t.risk[level]}: ${pct}%`}><div className={`risk-bar-fill risk-bar-fill--${level.toLowerCase()}`} style={{ width: `${pct}%` }} /></div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      <section className="panel panel-static" aria-labelledby="history-title">
+        <header className="section-heading">
+          <div><h2 id="history-title"><History size={16} aria-hidden="true" /> {r.reportHistory}</h2><p>{history.status === "ok" ? r.generatedCount(history.rows.length) : r.historyHint}</p></div>
+          <Button variant="ghost" onClick={retryHistory} busy={history.status === "loading"}><RefreshCw size={15} aria-hidden="true" />{t.common.refresh}</Button>
+        </header>
+        <DataState loading={history.status === "loading"} error={history.status === "error" ? history.message : null} empty={history.status === "ok" && history.rows.length === 0} onRetry={retryHistory}>
+          <div className="table-scroll desktop-records">
+            <table className="data-table">
+              <caption className="sr-only">{r.reportHistory}</caption>
+              <thead><tr><th scope="col">{r.colIncident}</th><th scope="col">{r.colTeam}</th><th scope="col">{r.colCost}</th><th scope="col">{r.colGeneratedBy}</th><th scope="col">{r.colGeneratedAt}</th></tr></thead>
+              <tbody>
+                {historyRows.map((h) => (
+                  <tr key={h.id}>
+                    <td><strong>{h.incidentDisplayId}</strong><span className="cell-secondary">{h.incidentTitle}</span></td>
+                    <td>{h.team}</td>
+                    <td>${h.estimatedCostUsd.toLocaleString("en-US")}<span className="cell-secondary">{t.incidentDetail.estimateTag}</span></td>
+                    <td>{h.generatedBy}</td>
+                    <td>{formatWorkspaceTime(h.generatedAt, lang)} AZT</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mobile-records">
+            {historyRows.map((h) => (
+              <article className="record-card" key={h.id}>
+                <div className="record-card-header"><strong>{h.incidentDisplayId}</strong><span>${h.estimatedCostUsd.toLocaleString("en-US")}</span></div>
+                <p>{h.incidentTitle}</p>
+                <div className="record-card-meta"><span>{h.generatedBy}</span><span>{formatWorkspaceTime(h.generatedAt, lang)}</span></div>
+              </article>
+            ))}
+          </div>
+        </DataState>
+      </section>
+
+      <section className="panel panel-static" aria-labelledby="scans-title">
+        <header className="section-heading">
+          <div><h2 id="scans-title"><Satellite size={16} aria-hidden="true" /> {r.scanHistory}</h2><p>{r.scanHistoryHint}</p></div>
+          <Button variant="ghost" onClick={retryScans} busy={scans.status === "loading"}><RefreshCw size={15} aria-hidden="true" />{t.common.refresh}</Button>
+        </header>
+        <DataState loading={scans.status === "loading"} error={scans.status === "error" ? scans.message : null} empty={scans.status === "ok" && scans.rows.length === 0} onRetry={retryScans}>
+          <ul className="scan-grid">
+            {(scans.status === "ok" ? scans.rows : []).map((s) => (
+              <li key={s.id}>
+                <button type="button" className="scan-tile" onClick={() => setOpenScan(s)} aria-label={`${r.scanDetails}: ${s.lat.toFixed(3)}°N, ${s.lng.toFixed(3)}°E, ${s.found ? r.scanFound(Math.round(s.aiProbability * 100)) : r.scanNotFound}`}>
+                  {s.sarImageBase64 ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery
+                    <img src={`data:image/png;base64,${s.sarImageBase64}`} alt="" />
+                  ) : (
+                    <span className="scan-tile-empty"><Satellite size={20} aria-hidden="true" /></span>
+                  )}
+                  <span className="scan-tile-body">
+                    <span className={`scan-result${s.found ? " scan-result--found" : ""}`}>{s.found ? r.scanFound(Math.round(s.aiProbability * 100)) : r.scanNotFound}</span>
+                    <span className="mono">{s.lat.toFixed(3)}°N, {s.lng.toFixed(3)}°E</span>
+                    <span className="scan-tile-time">{formatWorkspaceTime(s.createdAt, lang)} AZT</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </DataState>
+      </section>
+
+      <Dialog
+        open={!!openScan}
+        variant="center"
+        width={460}
+        title={r.scanDetails}
+        subtitle={openScan ? `${formatWorkspaceTime(openScan.createdAt, lang)} AZT` : undefined}
+        onClose={() => setOpenScan(null)}
+        footer={openScan && (
+          <Button variant="primary" onClick={() => void generateScanPdf(openScan)} busy={scanPdfState === "generating"}>
+            <FileDown size={16} aria-hidden="true" />{scanPdfState === "ready" ? t.incidentDetail.generateAgain : t.incidentDetail.generatePdfReport}
+          </Button>
+        )}
+      >
+        {openScan && (
+          <div className="scan-detail">
+            {openScan.sarImageBase64 && (
+              // eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery
+              <img src={`data:image/png;base64,${openScan.sarImageBase64}`} alt={t.incidentDetail.originalSar} />
+            )}
+            <dl className="summary-list">
+              <div><dt>{r.scanCoordinates}</dt><dd>{openScan.lat.toFixed(4)}°N, {openScan.lng.toFixed(4)}°E{place ? ` (${place})` : ""}</dd></div>
+              <div><dt>{r.scanSearchWindow}</dt><dd>{openScan.fromDate && openScan.toDate ? `${openScan.fromDate} → ${openScan.toDate}` : r.scanDefaultWindow}</dd></div>
+              <div><dt>{r.scanResult}</dt><dd>{openScan.found ? r.scanFound(Math.round(openScan.aiProbability * 100)) : r.scanNotFound}</dd></div>
+              {openScan.found && <div><dt>{r.scanArea}</dt><dd>{formatAreaM2(openScan.areaM2)}</dd></div>}
+              {openScan.requestedBy && <div><dt>{r.scanRequestedBy}</dt><dd>{openScan.requestedBy}</dd></div>}
+              <div><dt>{r.scanLinkedIncident}</dt><dd>{openScan.incidentId ? incidents.find((i) => i.id === openScan.incidentId)?.displayId || openScan.incidentId : r.scanNoIncident}</dd></div>
+            </dl>
+            <div aria-live="polite">
+              {scanPdfState === "ready" && <p className="detail-hint">{t.pdf.downloaded}</p>}
+              {scanPdfState === "error" && <Notice tone="error">{t.pdf.failed}</Notice>}
+            </div>
+          </div>
+        )}
+      </Dialog>
+
+      <Dialog open={previewOpen} variant="center" width={520} title={r.previewTitle} subtitle={r.previewBody} onClose={() => setPreviewOpen(false)} footer={exportButtons}>
+        <dl className="summary-list">
+          <div><dt>{r.totalIncidents}</dt><dd>{report.totalIncidents}</dd></div>
+          <div><dt>{r.detectedArea}</dt><dd>{formatAreaM2(report.totalDetectedAreaM2)}</dd></div>
+          <div><dt>{r.cleanedArea}</dt><dd>{formatAreaM2(report.totalCleanedAreaM2)}</dd></div>
+          <div><dt>{r.highRiskIncidents}</dt><dd>{report.highRiskCount}</dd></div>
+          <div><dt>{r.avgAiConfidence}</dt><dd>{score}</dd></div>
+          <div><dt>{r.reportHistory}</dt><dd>{r.generatedCount(historyRows.length)}</dd></div>
+        </dl>
+      </Dialog>
     </div>
   );
 }

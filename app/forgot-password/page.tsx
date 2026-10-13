@@ -2,24 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { validateEmail } from "@/lib/auth";
 import { useLanguage } from "@/lib/useLanguage";
+import AuthLayout, { AuthField } from "@/components/auth/AuthLayout";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
 
 export default function ForgotPasswordPage() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const emailError = validateEmail(email);
-    if (emailError) {
-      setError(emailError);
-      return;
-    }
+    if (loading) return;
+    const emailKey = validateEmail(email);
+    setFieldError(emailKey ? t.auth[emailKey] : null);
+    if (emailKey) return;
     setError(null);
     setLoading(true);
     try {
@@ -29,6 +32,7 @@ export default function ForgotPasswordPage() {
         body: JSON.stringify({ email: email.trim() }),
       });
       if (!res.ok) {
+        if (res.status >= 500) throw new Error(t.auth.serverUnavailable);
         const data = await res.json().catch(() => null);
         throw new Error(data?.error || t.auth.somethingWentWrong);
       }
@@ -41,64 +45,25 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-page-bg" aria-hidden />
-      <div className="auth-page-shell">
-        <Link href="/login" className="auth-back">
-          <ArrowLeft size={14} /> {t.auth.backToLogin}
-        </Link>
-
-        <div className="auth-card">
-          <div className="auth-card-brand">
-            <img src="/logo-icon.png" alt="SeaSentry" className="auth-card-logo" />
-            <div>
-              <div className="auth-card-title">SeaSentry</div>
-              <div className="auth-card-sub">Satellite &amp; AI Oil Spill Intelligence</div>
-            </div>
-          </div>
-
-          <h1 className="auth-heading">{t.auth.resetYourPassword}</h1>
-          <p className="auth-lede">
-            {t.auth.enterEmailForReset}
-          </p>
-
-          {sent ? (
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "var(--accent)", padding: "12px 0" }}>
-              <CheckCircle2 size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-              <span>{t.auth.resetLinkSentNote}</span>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="auth-form" noValidate>
-              <div className="auth-field">
-                <label htmlFor="email">{t.auth.email}</label>
-                <input
-                  id="email"
-                  className="auth-input"
-                  type="email"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@organization.az"
-                />
-              </div>
-
-              {error && <div className="auth-error" role="alert">{error}</div>}
-
-              <button type="submit" className="auth-button" disabled={loading}>
-                {loading ? <Loader2 size={18} className="spinner" /> : (
-                  <>
-                    {t.auth.sendResetLink} <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </form>
-          )}
-
-          <p className="auth-switch">
-            {t.auth.rememberedIt} <Link href="/login">{t.auth.login}</Link>
-          </p>
-        </div>
-      </div>
-    </div>
+    <AuthLayout
+      title={t.auth.resetYourPassword}
+      lede={t.auth.enterEmailForReset}
+      back={{ href: "/login", label: t.auth.backToLogin }}
+      footer={<p className="auth-switch">{t.auth.rememberedIt} <Link href="/login">{t.auth.login}</Link></p>}
+    >
+      {sent ? (
+        <Notice tone="success">{t.auth.resetLinkSentNote}</Notice>
+      ) : (
+        <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <AuthField id="email" label={t.auth.email} error={fieldError}>
+            <input id="email" name="email" className="auth-input" type="email" autoComplete="email" spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@organization.az" aria-invalid={!!fieldError} aria-describedby={fieldError ? "email-error" : undefined} />
+          </AuthField>
+          {error && <Notice tone="error">{error}</Notice>}
+          <Button type="submit" variant="primary" className="auth-submit" busy={loading}>
+            {t.auth.sendResetLink}<ArrowRight size={16} aria-hidden="true" />
+          </Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
-import { getCurrentUser, isAdmin, type UserRole } from "@/lib/auth";
+import { isAdmin, type UserRole } from "@/lib/auth";
+import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
 import { Users, ShieldCheck, UserCog, LogIn, MessageSquare, Search, CheckCircle2, Undo2, Reply, Send, Loader2, History, Trash2 } from "lucide-react";
 
@@ -58,7 +59,7 @@ export default function AdminPage() {
 
 function AdminContent() {
   const { t } = useLanguage();
-  const admin = isAdmin(getCurrentUser());
+  const admin = isAdmin(useSession().user);
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [userSearch, setUserSearch] = useState("");

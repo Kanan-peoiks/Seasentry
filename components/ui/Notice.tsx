@@ -1,11 +1,15 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AlertCircle, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info, TriangleAlert } from "lucide-react";
 
-export default function Notice({ children, tone = "info", action }: { children: ReactNode; tone?: "info" | "error" | "success"; action?: ReactNode }) {
+type Tone = "info" | "error" | "success" | "warning";
+const ICONS = { info: Info, error: AlertCircle, success: CheckCircle2, warning: TriangleAlert };
+
+export default function Notice({ children, tone = "info", action }: { children: ReactNode; tone?: Tone; action?: ReactNode }) {
+  const Icon = ICONS[tone];
   return <div className={`ui-notice ui-notice--${tone}`} role={tone === "error" ? "alert" : "status"}>
-    {tone === "error" ? <AlertCircle size={18} aria-hidden="true" /> : <Info size={18} aria-hidden="true" />}
-    <div>{children}</div>{action && <div className="ui-notice-action">{action}</div>}
+    <Icon size={18} aria-hidden="true" />
+    <div className="ui-notice-body">{children}</div>{action && <div className="ui-notice-action">{action}</div>}
   </div>;
 }

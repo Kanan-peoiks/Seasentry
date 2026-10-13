@@ -36,7 +36,8 @@ import RiskBadge from "@/components/ui/RiskBadge";
 import StatusBadge from "@/components/ui/StatusBadge";
 import DetailPanel from "@/components/ui/DetailPanel";
 import { useIncidentStore } from "@/lib/incident-store";
-import { getCurrentUser, canOperate } from "@/lib/auth";
+import { canOperate } from "@/lib/auth";
+import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
 import type { Translations } from "@/lib/i18n";
 import {
@@ -643,7 +644,8 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
   const live = incident ? getIncidentById(incident.id) || incident : null;
   const vessel = getVesselById(live?.relatedVesselId);
   const pending = live?.reviewStatus === "PENDING" || live?.humanDecision === "pending";
-  const canAct = canOperate(getCurrentUser());
+  const { user: sessionUser } = useSession();
+  const canAct = canOperate(sessionUser);
 
   const { wind, sea, estimate: sourceEstimate, loading: weatherLoading } = useSpillSourceEstimate(live);
   const [pdfState, setPdfState] = useState<"idle" | "generating" | "ready">("idle");
@@ -666,13 +668,12 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
 
   const run = async (action: "confirm" | "reject" | "escalate" | "mark_cleaning" | "resolve") => {
     if (!live || actingOn) return;
-    const user = getCurrentUser();
     setActionError(null);
     setActingOn(action);
     const result = await applyHumanAction({
       incidentId: live.id,
       action,
-      operatorName: user?.name || "Operator",
+      operatorName: sessionUser?.name || "Operator",
     });
     setActingOn(null);
     if (!result.ok) {

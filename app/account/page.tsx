@@ -1,30 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
-import { getCurrentUser, logout, type AuthUser } from "@/lib/auth";
+import type { AuthUser } from "@/lib/auth";
+import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
 import { Shield, LogOut, User, Send, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function AccountPage() {
   const router = useRouter();
   const { t } = useLanguage();
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { user, signOut } = useSession();
+  const [signOutFailed, setSignOutFailed] = useState(false);
   const ROLE_LABEL: Record<AuthUser["role"], string> = {
     viewer: t.account.roleViewer,
     operator: t.account.roleOperator,
     admin: t.account.roleAdmin,
   };
 
-  useEffect(() => {
-    setUser(getCurrentUser());
-  }, []);
-
-  const handleLogout = () => {
-    logout();
-    router.push("/");
+  const handleLogout = async () => {
+    setSignOutFailed(false);
+    if (await signOut()) router.replace("/");
+    else setSignOutFailed(true);
   };
 
   return (
@@ -116,6 +115,7 @@ export default function AccountPage() {
               >
                 <LogOut size={15} /> {t.account.logout}
               </button>
+              {signOutFailed && <div className="auth-error" role="alert">{t.session.signOutError}</div>}
             </div>
           </div>
         </div>

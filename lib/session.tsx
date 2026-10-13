@@ -96,6 +96,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return nextUser;
     } catch {
       if (revision !== revisionRef.current || controller.signal.aborted) return null;
+      // A verified session survives a transient outage during navigation;
+      // only a first check without any verified user becomes "unavailable".
+      if (userRef.current) return userRef.current;
       userRef.current = null;
       setUser(null);
       setStatus("unavailable");

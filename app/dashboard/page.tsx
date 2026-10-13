@@ -14,7 +14,8 @@ import { useIncidentStore, LIVE_INCIDENT_ID } from "@/lib/incident-store";
 import { useSpillSourceEstimate } from "@/lib/useSpillSourceEstimate";
 import { mockData } from "@/lib/mock-data";
 import type { Incident } from "@/lib/types";
-import { getCurrentUser, canOperate } from "@/lib/auth";
+import { canOperate } from "@/lib/auth";
+import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
 import { MapPin, Satellite, X } from "lucide-react";
 
@@ -44,7 +45,8 @@ function DashboardContent() {
   const [weatherPortId, setWeatherPortId] = useState(mockData.ports[0].id);
   const weatherPort =
     mockData.ports.find((p) => p.id === weatherPortId) || mockData.ports[0];
-  const canAct = canOperate(getCurrentUser());
+  const { user } = useSession();
+  const canAct = canOperate(user);
 
   const handleIncidentSelect = (inc: Incident) => {
     if (inc.id === LIVE_INCIDENT_ID) {

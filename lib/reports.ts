@@ -10,7 +10,7 @@ import { createPdf } from "@/lib/pdf";
 import { formatAreaM2 } from "@/lib/mock-data";
 import { compassLabel, SORBENT_RATIO_G, type ResponseMaterials, type SpillSourceResult } from "@/lib/spill-physics";
 import { isMeasuredScan } from "@/lib/incident-metrics";
-import { formatWorkspaceTime } from "@/lib/workspace-url";
+import { formatWorkspaceDateTime, formatWorkspaceTime } from "@/lib/workspace-url";
 import { LIVE_INCIDENT_ID } from "@/lib/incident-store";
 import type { Language, Translations } from "@/lib/i18n";
 import type { Incident, ReportSummary } from "@/lib/types";
@@ -43,8 +43,7 @@ export type ScanLog = {
 
 const stamp = () => new Date().toISOString().slice(0, 10);
 const when = (iso: string, lang: Language) => `${formatWorkspaceTime(iso, lang)} AZT`;
-const fullTime = (iso: string, lang: Language) =>
-  `${new Intl.DateTimeFormat(lang === "az" ? "az-AZ" : "en-GB", { timeZone: "Asia/Baku", dateStyle: "medium", timeStyle: "short" }).format(new Date(iso))} AZT`;
+const fullTime = (iso: string, lang: Language) => `${formatWorkspaceDateTime(iso, lang)} AZT`;
 
 export async function downloadIncidentPdf(incident: Incident, materials: ResponseMaterials, estimate: SpillSourceResult | null, t: Translations, lang: Language) {
   const p = t.pdf;

@@ -385,6 +385,7 @@ html, body {
   .workspace-header-actions { gap: 4px; }
   .workspace-user { display: none; }
   .workspace-brand { padding: 4px; }
+  .workspace-brand-copy { display: none; }
 }
 /* ── Dashboard ── */
 .dashboard { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 16px; padding: 16px 24px 24px; }
@@ -724,3 +725,6 @@ html, body {
 .feedback-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .quote { margin: 0; padding: 12px; border-left: 3px solid var(--glass-border); color: var(--text-secondary); font-size: 14px; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .account-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .filter-field { flex: 1 1 100%; } .filter-bar select { min-width: 0; } .filter-trailing { margin-left: 0; } }
+.error-page { min-height: 100dvh; background: var(--bg-base); }
+.error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }

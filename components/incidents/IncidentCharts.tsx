@@ -10,23 +10,20 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  PieChart,
-  Pie,
-  Cell,
   BarChart,
   Bar,
 } from "recharts";
-import type { ProjectionPoint, CompanyShare, ResponseOption, MethodComparison } from "@/lib/spill-physics";
+import type { ProjectionPoint, ResponseOption } from "@/lib/spill-physics";
 import { useLanguage } from "@/lib/useLanguage";
 
 // Hex values mirror the app's CSS custom properties (app/globals.css) —
 // hardcoded because SVG chart libraries need literal color strings.
-const COLOR_ACCENT = "#81B29A";
-const COLOR_HIGH = "#E07A5F";
-const COLOR_MED = "#E9C46A";
-const COLOR_LOW = "#A8DADC";
-const COLOR_TEXT_SECONDARY = "#6C757D";
-const COLOR_GRID = "#E6E2DA";
+const COLOR_ACCENT = "#087F7A";
+const COLOR_HIGH = "#C44543";
+const COLOR_MED = "#B7791F";
+const COLOR_LOW = "#237F9C";
+const COLOR_TEXT_SECONDARY = "#526778";
+const COLOR_GRID = "#D6E2E8";
 
 const tooltipStyle = {
   background: "var(--bg-elevated)",
@@ -191,41 +188,6 @@ export function SpillProjectionChart({ series }: { series: ProjectionPoint[] }) 
     </ResponsiveContainer>
   );
 }
-
-// ------------------------------------------------------------------
-// Source attribution — unconfirmed company-share pie chart.
-// ------------------------------------------------------------------
-
-const PIE_COLORS = [COLOR_ACCENT, COLOR_HIGH, COLOR_LOW];
-
-export function SourceAttributionPie({ data }: { data: CompanyShare[] }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-      <ResponsiveContainer width={160} height={160}>
-        <PieChart>
-          <Pie data={data} dataKey="pct" nameKey="name" innerRadius={40} outerRadius={72} paddingAngle={2}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="var(--bg-elevated)" strokeWidth={2} />
-            ))}
-          </Pie>
-          <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${v}%`} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div style={{ display: "grid", gap: 8, flex: 1, minWidth: 140 }}>
-        {data.map((d, i) => (
-          <div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--text-primary)" }}>
-              <span style={{ width: 9, height: 9, borderRadius: "50%", background: PIE_COLORS[i % PIE_COLORS.length], display: "inline-block" }} />
-              {d.name}
-            </span>
-            <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{d.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ------------------------------------------------------------------
 // Response options — recommended strategies by time and cost.
 // ------------------------------------------------------------------
@@ -245,61 +207,5 @@ export function ResponseOptionsBar({ data }: { data: ResponseOption[] }) {
         <Bar yAxisId="cost" dataKey="costUsd" name={t.charts.cost} fill={COLOR_ACCENT} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
-  );
-}
-
-// ------------------------------------------------------------------
-// Method comparison — SeaSentry (AI-assisted) vs. traditional response.
-// ------------------------------------------------------------------
-
-/** Each metric (hours vs. dollars) gets its own scale — a shared axis would
- * make the hours bar invisible next to cost figures in the thousands. */
-export function MethodComparisonBar({ data }: { data: MethodComparison[] }) {
-  const { t } = useLanguage();
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-      {data.map((m) => (
-        <div key={m.metric}>
-          <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4, textAlign: "center" }}>
-            {m.metric}
-          </div>
-          <ResponsiveContainer width="100%" height={140}>
-            <BarChart
-              data={[
-                { name: "SeaSentry", value: m.seaSentry },
-                { name: "Traditional", value: m.traditional },
-              ]}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid stroke={COLOR_GRID} strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: COLOR_TEXT_SECONDARY }} axisLine={{ stroke: COLOR_GRID }} tickLine={false} />
-              <YAxis
-                tick={{ fontSize: 10, fill: COLOR_TEXT_SECONDARY }}
-                axisLine={false}
-                tickLine={false}
-                width={m.unit === "$" ? 56 : 32}
-                tickFormatter={(v) => (m.unit === "$" ? `$${v}` : `${v}h`)}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(value) => (m.unit === "$" ? [`$${Number(value).toLocaleString("en-US")}`, t.charts.tooltipCost] : [`${value} h`, t.charts.tooltipTime])}
-              />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                <Cell fill={COLOR_ACCENT} />
-                <Cell fill={COLOR_HIGH} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ))}
-      <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "center", gap: 16, fontSize: 11 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-secondary)" }}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: COLOR_ACCENT, display: "inline-block" }} /> {t.charts.legendSeaSentry}
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-secondary)" }}>
-          <span style={{ width: 9, height: 9, borderRadius: 2, background: COLOR_HIGH, display: "inline-block" }} /> {t.charts.legendTraditional}
-        </span>
-      </div>
-    </div>
   );
 }

@@ -282,18 +282,6 @@ export function deriveProjectionSeries(incident: Incident): ProjectionPoint[] {
 
   return points;
 }
-
-export type CompanyShare = { name: string; pct: number };
-
-/** Fixed, per spec: unconfirmed attribution split shown as a pie chart. */
-export function deriveSourceAttribution(t: Translations): CompanyShare[] {
-  return [
-    { name: "SOCAR", pct: 85 },
-    { name: "BP", pct: 10 },
-    { name: t.charts.sourceOthers, pct: 5 },
-  ];
-}
-
 export type ResponseOption = { name: string; hours: number; costUsd: number };
 
 export function deriveResponseOptions(
@@ -317,41 +305,6 @@ export function deriveResponseOptions(
       name: t.charts.optionRapid,
       hours: Math.max(1, materials.durationHours - 3),
       costUsd: Math.round(materials.estimatedCostUsd * 1.6),
-    },
-  ];
-}
-
-export type MethodComparison = {
-  metric: string;
-  seaSentry: number;
-  traditional: number;
-  unit: string;
-};
-
-/** AI-assisted vs. traditional (manual patrol/reporting) response. */
-export function deriveMethodComparison(
-  incident: Incident,
-  materials: ResponseMaterials,
-  t: Translations
-): MethodComparison[] {
-  const seed = hashString(incident.id + "-method");
-  const seaSentryDetectHours = 1 + (seed % 3);
-  const traditionalDetectHours = seaSentryDetectHours * (6 + (seed % 5));
-  const spreadFactor = traditionalDetectHours / seaSentryDetectHours;
-  const traditionalCost = Math.round(materials.estimatedCostUsd * Math.min(3, 1 + spreadFactor * 0.25));
-
-  return [
-    {
-      metric: t.charts.metricDetectionToResponse,
-      seaSentry: seaSentryDetectHours,
-      traditional: traditionalDetectHours,
-      unit: "h",
-    },
-    {
-      metric: t.charts.metricTotalCost,
-      seaSentry: materials.estimatedCostUsd,
-      traditional: traditionalCost,
-      unit: "$",
     },
   ];
 }

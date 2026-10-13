@@ -38,3 +38,27 @@ export function incidentProvenance(incident: Incident, lang: "en" | "az") {
   if (isMeasuredScan(incident)) return lang === "az" ? "SAR ölçməsi" : "SAR scan";
   return lang === "az" ? "Demo / təsvir yoxdur" : "Demo / no imagery";
 }
+
+export type DecisionAction = "confirm" | "reject" | "escalate" | "mark_cleaning" | "resolve";
+export type DecisionStage = "pending" | "escalated" | "confirmed" | "cleaning" | "resolved" | "rejected";
+
+export function decisionStage(incident: Incident): DecisionStage {
+  if (incident.status === "rejected") return "rejected";
+  if (incident.status === "resolved") return "resolved";
+  if (incident.status === "cleaning") return "cleaning";
+  if (incident.status === "under_review" && incident.humanDecision === "confirmed_spill") return "confirmed";
+  if (incident.humanDecision === "escalated") return "escalated";
+  return "pending";
+}
+
+/** The one decision rule the UI follows. Payload action names are the
+ * backend's own and must not change. */
+export function decisionActions(incident: Incident): DecisionAction[] {
+  switch (decisionStage(incident)) {
+    case "pending": return ["confirm", "reject", "escalate"];
+    case "escalated": return ["confirm", "reject"];
+    case "confirmed": return ["mark_cleaning"];
+    case "cleaning": return ["resolve"];
+    default: return [];
+  }
+}

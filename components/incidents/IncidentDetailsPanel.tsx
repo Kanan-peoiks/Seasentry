@@ -1,133 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { jsPDF } from "jspdf";
-import {
-  formatAreaM2,
-  formatDateTimeAZT,
-  HUMAN_DECISION_LABEL,
-  getVesselById,
-  haversineKm,
-} from "@/lib/mock-data";
+import { CheckCircle2, ChevronDown, CircleSlash, FileDown, Satellite, Ship, TriangleAlert, UserCheck, X, XCircle, Droplets, ArrowUpRight } from "lucide-react";
+import { formatAreaM2, formatDateTimeAZT, HUMAN_DECISION_LABEL, getVesselById, haversineKm } from "@/lib/mock-data";
 import type { Incident } from "@/lib/types";
-import {
-  hashString,
-  deriveAiImpact,
-  deriveResponseMaterials,
-  deriveProjectionSeries,
-  deriveSourceAttribution,
-  deriveResponseOptions,
-  deriveMethodComparison,
-  compassLabel,
-  SORBENT_RATIO_G,
-  type ResponseMaterials,
-  type SpillSourceResult,
-} from "@/lib/spill-physics";
+import { deriveAiImpact, deriveResponseMaterials, deriveProjectionSeries, deriveResponseOptions, compassLabel, SORBENT_RATIO_G, type ResponseMaterials, type SpillSourceResult } from "@/lib/spill-physics";
 import { useSpillSourceEstimate } from "@/lib/useSpillSourceEstimate";
-import {
-  ConfidenceGauges,
-  SpillProjectionChart,
-  SourceAttributionPie,
-  ResponseOptionsBar,
-  MethodComparisonBar,
-} from "@/components/incidents/IncidentCharts";
+import { ConfidenceGauges, SpillProjectionChart, ResponseOptionsBar } from "@/components/incidents/IncidentCharts";
 import RiskBadge from "@/components/ui/RiskBadge";
 import StatusBadge from "@/components/ui/StatusBadge";
 import DetailPanel from "@/components/ui/DetailPanel";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
 import { useIncidentStore } from "@/lib/incident-store";
 import { canOperate } from "@/lib/auth";
 import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
-import type { Translations } from "@/lib/i18n";
-import {
-  Satellite,
-  Ship,
-  CloudSun,
-  UserCheck,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Droplets,
-  Brain,
-  FileDown,
-  Loader2,
-  History,
-  ListChecks,
-  DollarSign,
-  Anchor,
-  Crosshair,
-  TrendingUp,
-  PieChart as PieChartIcon,
-  Scale,
-  X,
-} from "lucide-react";
+import { decisionActions, decisionStage, incidentProvenance, isMeasuredScan, type DecisionAction } from "@/lib/incident-metrics";
+import { formatWorkspaceTime } from "@/lib/workspace-url";
 
-/** Confidence sub-scores + processing pipeline, shown only in the expanded
- * full-page view. Uses the incident's real per-feature scores and real
- * fetch/analyze timings (backend/app/spill_detect.py's texture_pct/edge_pct/
- * contrast_pct, routers/detect.py's fetch_ms/analyze_ms) when present — only
- * incidents created via a real POST /detect scan have them. Seeded/manually-
- * reported incidents predate that data existing at all, so they fall back to
- * sub-scores jittered *around the real aiProbability* (not independent
- * random numbers, so the on-screen "Composite" still matches the actual
- * model confidence shown elsewhere on this panel) and show no pipeline
- * timings rather than fabricated ones. */
-function deriveAiDeepDive(incident: Incident, t: Translations) {
-  const real = Math.round(incident.aiProbability * 100);
-  const hasRealFeatures =
-    incident.texturePct != null && incident.edgePct != null && incident.contrastPct != null;
-
-  let texture: number;
-  let edge: number;
-  let contrast: number;
-  if (hasRealFeatures) {
-    texture = incident.texturePct!;
-    edge = incident.edgePct!;
-    contrast = incident.contrastPct!;
-  } else {
-    const seed = hashString(incident.id + "-deep");
-    const jitter = (shift: number, spread: number) => {
-      const offset = ((seed >> shift) % (spread * 2 + 1)) - spread;
-      return Math.max(0, Math.min(100, real + offset));
-    };
-    texture = jitter(0, 10);
-    edge = jitter(4, 14);
-    contrast = jitter(8, 8);
-  }
-
-  const pipeline =
-    incident.fetchMs != null && incident.analyzeMs != null
-      ? [
-          { step: t.incidentDetail.pipelineSatelliteFetch, ms: incident.fetchMs },
-          { step: t.incidentDetail.pipelineAnalysis, ms: incident.analyzeMs },
-        ]
-      : [];
-
-  return {
-    confidence: { texture, edge, contrast, composite: real, isReal: hasRealFeatures },
-    pipeline,
-  };
-}
-
-/** Pick up to 2 other incidents most similar to this one, for the "similar
- * historical incidents" comparison in the AI deep-dive. Similarity is a real
- * deterministic score over each incident's actual coordinates, area and risk
- * level — not a random number — weighted toward proximity (nearby incidents
- * more plausibly share a common cause, e.g. the same pipeline corridor). */
+/** The two closest other incidents by real distance — useful context when
+ * several reports cluster along the same corridor. */
 function findSimilarIncidents(incident: Incident, all: Incident[]) {
   return all
     .filter((i) => i.id !== incident.id)
-    .map((i) => {
-      const distanceKm = haversineKm(incident.lat, incident.lng, i.lat, i.lng);
-      const proximityScore = Math.exp(-distanceKm / 100); // decays over ~100km
-      const areaRatio =
-        Math.min(incident.areaM2, i.areaM2) / Math.max(incident.areaM2, i.areaM2, 1);
-      const riskMatch = i.risk === incident.risk ? 1 : 0.5;
-      const similarity = Math.round((proximityScore * 0.5 + areaRatio * 0.3 + riskMatch * 0.2) * 100);
-      return { displayId: i.displayId, location: i.location, similarity };
-    })
-    .sort((a, b) => b.similarity - a.similarity)
+    .map((i) => ({ displayId: i.displayId, location: i.location, distanceKm: Math.round(haversineKm(incident.lat, incident.lng, i.lat, i.lng)) }))
+    .filter((i) => i.distanceKm <= 100)
+    .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 2);
 }
 
@@ -369,920 +270,296 @@ function saveReportSnapshot(incident: Incident, materials: ResponseMaterials) {
 type Props = {
   incident: Incident | null;
   onClose: () => void;
-  /** Opens as a full-page view instead of a compact side panel — purely a
-   * layout choice, independent of how much content is shown. */
+  /** Opens as a full-page view instead of a side panel. */
   expanded?: boolean;
-  /** "incident" (default) shows a compact AI summary with a CTA into the
-   * full breakdown — even when expanded. "ai" shows the full AI deep-dive
-   * (confidence gauges, projection/attribution/options charts, source &
-   * drift analysis, method comparison) — only reached by actually
-   * navigating to the AI Analysis page. */
+  /** "ai" also shows the modelled projections; "incident" (default) links to them. */
   context?: "incident" | "ai";
   /** "dialog" (default) opens a modal; "docked" renders inline, e.g. in the dashboard rail. */
   presentation?: "dialog" | "docked";
 };
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, wide }: { label: string; children: ReactNode; wide?: boolean }) {
   return (
-    <div>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: "0.07em",
-          textTransform: "uppercase",
-          color: "var(--text-tertiary)",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.45 }}>
-        {children}
-      </div>
+    <div className={`fact${wide ? " fact--wide" : ""}`}>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
     </div>
   );
 }
 
-function FreshnessNote({ staleMinutes }: { staleMinutes: number }) {
-  const { t } = useLanguage();
+function Tag({ kind, children }: { kind: "measured" | "estimate" | "calculation" | "demo"; children: ReactNode }) {
+  return <span className={`data-tag data-tag--${kind}`}>{children}</span>;
+}
+
+/** Secondary analysis, collapsed by default. */
+function Disclosure({ title, tag, children, defaultOpen = false }: { title: string; tag?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
   return (
-    <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 2 }}>
-      {t.incidentDetail.openMeteoStale(staleMinutes)}
-    </div>
+    <details className="disclosure" open={defaultOpen}>
+      <summary><span>{title}</span>{tag}<ChevronDown size={16} className="disclosure-chevron" aria-hidden="true" /></summary>
+      <div className="disclosure-body">{children}</div>
+    </details>
   );
 }
 
-function Section({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section
-      style={{
-        marginBottom: 18,
-        paddingBottom: 18,
-        borderBottom: "1px solid var(--glass-border)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 12,
-          color: "var(--text-secondary)",
-        }}
-      >
-        {icon}
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 650,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}
-        >
-          {title}
-        </span>
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** Decorative gradient box — no real satellite tile is fetched or rendered
- * anywhere in the app yet. Copernicus/Sentinel Hub OAuth credentials already
- * exist (see app/api/ for the token proxy), but the actual Process API image
- * request was never implemented. Once it is, swap this for a real <img> (or
- * canvas) fed by that call, in both the "Original SAR" and "AI Overlay" slots
- * below and in generateIncidentPdf's Satellite imagery section above. */
-function ImagePlaceholder({
-  title,
-  subtitle,
-  accent,
-  onClick,
-}: {
-  title: string;
-  subtitle: string;
-  accent: string;
-  onClick?: () => void;
-}) {
-  const clickable = !!onClick;
-  return (
-    <div
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={
-        clickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick?.();
-              }
-            }
-          : undefined
-      }
-      style={{
-        height: 120,
-        borderRadius: 8,
-        border: clickable
-          ? "1px solid rgba(224,122,95,0.35)"
-          : "1px dashed var(--glass-border-light)",
-        background: `linear-gradient(160deg, ${accent} 0%, var(--bg-elevated) 60%)`,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        textAlign: "center",
-        padding: 12,
-        cursor: clickable ? "pointer" : "default",
-      }}
-    >
-      <Satellite size={18} color="var(--accent)" />
-      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>{title}</div>
-      <div style={{ fontSize: 10, color: "var(--text-tertiary)", lineHeight: 1.4 }}>{subtitle}</div>
-      {clickable && (
-        <div style={{ fontSize: 9, color: "var(--color-high-text)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-          View AI analysis →
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** A real fetched Sentinel-1 tile (see app/satellite.py + routers/detect.py)
- * — same footprint as ImagePlaceholder, shown in its place whenever an
- * incident actually has one (only true for incidents created via the
- * "Check for New Imagery" scan; seeded/manually-reported incidents never
- * have a real image and keep showing ImagePlaceholder). */
-function SarImageCard({
-  base64,
-  title,
-  linkLabel,
-  onClick,
-}: {
-  base64: string;
-  title: string;
-  linkLabel?: string;
-  onClick?: () => void;
-}) {
-  const clickable = !!onClick;
-  return (
-    <div
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={
-        clickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onClick?.();
-              }
-            }
-          : undefined
-      }
-      style={{
-        position: "relative",
-        height: 120,
-        borderRadius: 8,
-        overflow: "hidden",
-        border: clickable ? "1px solid rgba(224,122,95,0.35)" : "1px solid var(--glass-border-light)",
-        cursor: clickable ? "pointer" : "default",
-      }}
-    >
-      <img
-        src={`data:image/png;base64,${base64}`}
-        alt={title}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          inset: "auto 0 0 0",
-          padding: "4px 8px",
-          background: "linear-gradient(0deg, rgba(0,0,0,0.65), transparent)",
-          fontSize: 10,
-          color: "#fff",
-          fontWeight: 600,
-        }}
-      >
-        {title}
-      </div>
-      {clickable && linkLabel && (
-        <div
-          style={{
-            position: "absolute",
-            top: 6,
-            right: 6,
-            fontSize: 9,
-            fontWeight: 700,
-            color: "#fff",
-            background: "rgba(224,122,95,0.9)",
-            padding: "2px 6px",
-            borderRadius: 4,
-            textTransform: "uppercase",
-            letterSpacing: "0.05em",
-          }}
-        >
-          {linkLabel}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const actionBtnStyle = (variant: "primary" | "danger" | "neutral" | "warn"): React.CSSProperties => {
-  const map = {
-    primary: {
-      color: "var(--accent)",
-      border: "1px solid rgba(129,178,154,0.35)",
-      background: "var(--accent-soft)",
-    },
-    danger: {
-      color: "var(--color-high-text)",
-      border: "1px solid rgba(224,122,95,0.3)",
-      background: "rgba(224,122,95,0.1)",
-    },
-    warn: {
-      color: "var(--color-med-text)",
-      border: "1px solid rgba(233,196,106,0.3)",
-      background: "rgba(233,196,106,0.1)",
-    },
-    neutral: {
-      color: "var(--accent)",
-      border: "1px solid rgba(129,178,154,0.3)",
-      background: "rgba(129,178,154,0.08)",
-    },
-  }[variant];
-
-  return {
-    ...map,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    borderRadius: 7,
-    padding: "8px 10px",
-    fontSize: 11,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    width: "100%",
-  };
+const ACTION_ICON: Record<DecisionAction, ReactNode> = {
+  confirm: <CheckCircle2 size={16} aria-hidden="true" />,
+  reject: <XCircle size={16} aria-hidden="true" />,
+  escalate: <TriangleAlert size={16} aria-hidden="true" />,
+  mark_cleaning: <Droplets size={16} aria-hidden="true" />,
+  resolve: <CheckCircle2 size={16} aria-hidden="true" />,
 };
 
 export default function IncidentDetailsPanel({ incident, onClose, expanded, context = "incident", presentation = "dialog" }: Props) {
-  const router = useRouter();
-  const { t } = useLanguage();
-  const { incidents: allIncidents, applyHumanAction, getIncidentById } = useIncidentStore();
+  const { t, lang } = useLanguage();
+  const d = t.incidentDetail;
+  const { incidents: allIncidents, applyHumanAction, getIncidentById, pendingActionId } = useIncidentStore();
+  const { user } = useSession();
+  // Always render the store's current copy so map, list and URL selections stay in sync.
   const live = incident ? getIncidentById(incident.id) || incident : null;
   const vessel = getVesselById(live?.relatedVesselId);
-  const pending = live?.reviewStatus === "PENDING" || live?.humanDecision === "pending";
-  const { user: sessionUser } = useSession();
-  const canAct = canOperate(sessionUser);
+  const canAct = canOperate(user);
+  const { wind, sea, windIssue, estimate: sourceEstimate, loading: weatherLoading } = useSpillSourceEstimate(live);
+  const [pdfState, setPdfState] = useState<{ id: string; state: "generating" | "ready" } | null>(null);
+  const [actionError, setActionError] = useState<{ id: string; message: string } | null>(null);
 
-  const { wind, sea, estimate: sourceEstimate, loading: weatherLoading } = useSpillSourceEstimate(live);
-  const [pdfState, setPdfState] = useState<"idle" | "generating" | "ready">("idle");
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actingOn, setActingOn] = useState<"confirm" | "reject" | "escalate" | "mark_cleaning" | "resolve" | null>(null);
+  const saving = Boolean(live && pendingActionId === live.id);
+  const busy = pendingActionId !== null;
+
+  const run = async (action: DecisionAction) => {
+    if (!live || busy) return;
+    setActionError(null);
+    const result = await applyHumanAction({ incidentId: live.id, action, operatorName: user?.name || "Operator" });
+    if (!result.ok) setActionError({ id: live.id, message: result.error || d.decisionFailed });
+  };
 
   const generatePdf = (materials: ResponseMaterials) => {
-    if (pdfState !== "idle" || !live) return;
-    setPdfState("generating");
+    if (!live || pdfState?.state === "generating") return;
+    setPdfState({ id: live.id, state: "generating" });
     setTimeout(() => {
       generateIncidentPdf(live, materials, sourceEstimate);
-      setPdfState("ready");
+      setPdfState({ id: live.id, state: "ready" });
       saveReportSnapshot(live, materials);
-    }, 1200);
+    }, 300);
   };
 
-  useEffect(() => {
-    setPdfState("idle");
-  }, [live?.id]);
+  const title = live ? d.incidentNumber(live.displayId) : "";
+  const body = live && (() => {
+    const stage = decisionStage(live);
+    const actions = decisionActions(live);
+    const measured = isMeasuredScan(live);
+    const impact = deriveAiImpact(live, wind);
+    const materials = deriveResponseMaterials(live, impact.volumeBbl);
+    const similar = findSimilarIncidents(live, allIncidents);
+    const hasFeatures = live.texturePct != null && live.edgePct != null && live.contrastPct != null;
+    const error = actionError?.id === live.id ? actionError.message : null;
+    const pdf = pdfState?.id === live.id ? pdfState.state : "idle";
+    const closed = stage === "resolved" || stage === "rejected";
 
-  const run = async (action: "confirm" | "reject" | "escalate" | "mark_cleaning" | "resolve") => {
-    if (!live || actingOn) return;
-    setActionError(null);
-    setActingOn(action);
-    const result = await applyHumanAction({
-      incidentId: live.id,
-      action,
-      operatorName: sessionUser?.name || "Operator",
-    });
-    setActingOn(null);
-    if (!result.ok) {
-      setActionError(result.error || t.incidentDetail.decisionFailed);
-    }
-  };
+    return (
+      <div className="incident-detail">
+        <div className="incident-identity">
+          <div className="incident-badges">
+            <RiskBadge risk={live.risk} />
+            <StatusBadge status={live.status} />
+            <span className="provenance">{incidentProvenance(live, lang)}</span>
+          </div>
+          <dl className="fact-grid">
+            <Field label={d.location}>{live.location || "—"}</Field>
+            <Field label={d.detectionTime}>{formatWorkspaceTime(live.timestamp, lang)} AZT</Field>
+            <Field label={d.detectionSource}>{live.detectionSource}</Field>
+            <Field label={d.coordinates}><span className="mono">{live.lat.toFixed(4)}°N, {live.lng.toFixed(4)}°E</span></Field>
+          </dl>
+        </div>
 
-  const title = live ? t.incidentDetail.incidentNumber(live.displayId) : "";
-  const body = live &&
-        (() => {
-          const impact = deriveAiImpact(live, wind);
-          const materials = deriveResponseMaterials(live, impact.volumeBbl);
-          const deep = deriveAiDeepDive(live, t);
-          const similar = findSimilarIncidents(live, allIncidents);
+        <section className={`decision-card decision-card--${stage}`} aria-labelledby={`decision-${live.id}`}>
+          <div className="decision-head">
+            <UserCheck size={20} aria-hidden="true" />
+            <div>
+              <h3 id={`decision-${live.id}`}>{d.nextDecision}</h3>
+              <p>{d.stage[stage]}</p>
+            </div>
+          </div>
+          {canAct && actions.length > 0 && (
+            <div className="decision-actions" role="group" aria-label={d.nextDecision} aria-busy={saving || undefined}>
+              {actions.map((action) => (
+                <Button key={action} variant={action === "reject" ? "danger" : action === "escalate" ? "secondary" : "primary"} disabled={busy} onClick={() => void run(action)}>
+                  {ACTION_ICON[action]}{d.actions[action]}
+                </Button>
+              ))}
+            </div>
+          )}
+          {saving && <p className="decision-status" role="status">{d.savingDecision}</p>}
+          {error && <Notice tone="error">{error}</Notice>}
+          {!canAct && !closed && <p className="decision-note">{d.viewOnlyAccess}</p>}
+          {closed && <p className="decision-note"><CircleSlash size={14} aria-hidden="true" />{d.noFurtherAction}</p>}
+          {live.humanDecision !== "pending" && (
+            <dl className="fact-grid decision-record">
+              <Field label={d.decision}>{d.humanDecision[live.humanDecision as keyof typeof d.humanDecision] ?? HUMAN_DECISION_LABEL[live.humanDecision] ?? live.humanDecision}</Field>
+              {live.humanDecisionBy && <Field label={d.specialist}>{live.humanDecisionBy}</Field>}
+              {live.humanDecisionAt && <Field label={d.decidedAt}>{formatWorkspaceTime(live.humanDecisionAt, lang)} AZT</Field>}
+              {live.humanDecisionNote && <Field label={d.notes} wide>{live.humanDecisionNote}</Field>}
+            </dl>
+          )}
+        </section>
 
-          return (
-            <>
-              <Section title={t.incidentDetail.incidentInformation}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                  <Field label={t.incidentDetail.incidentId}>
-                    <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--accent)" }}>
-                      {live.displayId}
-                    </span>
-                  </Field>
-                  <Field label={t.incidentDetail.detectionSource}>{live.detectionSource}</Field>
-                  <Field label={t.incidentDetail.location}>{live.location}</Field>
-                  <Field label={t.incidentDetail.detectionTime}>
-                    {formatDateTimeAZT(live.timestamp)} AZT
-                  </Field>
-                  <Field label={t.incidentDetail.coordinates}>
-                    <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "ui-monospace, monospace" }}>
-                      {live.lat.toFixed(4)}°N, {live.lng.toFixed(4)}°E
-                    </span>
-                  </Field>
-                  <Field label={t.incidentDetail.estimatedArea}>{formatAreaM2(live.areaM2)}</Field>
-                  <Field label={t.incidentDetail.risk}>
-                    <RiskBadge risk={live.risk} />
-                  </Field>
-                  <Field label={t.incidentDetail.status}>
-                    <StatusBadge status={live.status} />
-                  </Field>
-                  <Field label={t.incidentDetail.modelConfidence}>
-                    <span style={{ color: "var(--accent)", fontWeight: 600 }}>
-                      {Math.round(live.aiProbability * 100)}%
-                    </span>
-                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 4 }}>
-                      {t.incidentDetail.notPollutionProb}
-                    </span>
-                  </Field>
-                  <Field label={t.incidentDetail.reviewStatus}>{live.reviewStatus}</Field>
-                </div>
-              </Section>
-
-              <Section title={t.incidentDetail.satelliteAnalysis} icon={<Satellite size={14} />}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  {live.sarImageBase64 ? (
-                    <SarImageCard base64={live.sarImageBase64} title={t.incidentDetail.originalSar} />
-                  ) : (
-                    <ImagePlaceholder
-                      title={t.incidentDetail.originalSar}
-                      subtitle={t.incidentDetail.originalSarSub}
-                      accent="rgba(129,178,154,0.08)"
-                    />
-                  )}
-                  {live.sarOverlayBase64 ? (
-                    <SarImageCard
-                      base64={live.sarOverlayBase64}
-                      title={t.incidentDetail.aiOverlay}
-                      linkLabel={context !== "ai" ? t.incidentDetail.openFullAnalysis : undefined}
-                      onClick={
-                        context !== "ai"
-                          ? () => router.push(`/ai-analysis?open=${live.id}&wide=1`)
-                          : undefined
-                      }
-                    />
-                  ) : (
-                    <ImagePlaceholder
-                      title={t.incidentDetail.aiOverlay}
-                      subtitle={t.incidentDetail.aiOverlaySub}
-                      accent="rgba(224,122,95,0.1)"
-                      onClick={() => router.push(`/ai-analysis?open=${live.id}&wide=1`)}
-                    />
-                  )}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-                  <Field label={t.incidentDetail.detectedArea}>{formatAreaM2(live.areaM2)}</Field>
-                  <Field label={t.incidentDetail.modelConfidence}>
-                    {Math.round(live.aiProbability * 100)}%
-                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 4 }}>
-                      {t.incidentDetail.notPollutionProb}
-                    </span>
-                  </Field>
-                </div>
-              </Section>
-
-              <Section title={t.incidentDetail.aiAnalysis} icon={<Brain size={14} />}>
-                <p style={{ margin: 0, fontSize: 13, color: "var(--text-primary)", lineHeight: 1.55 }}>
-                  {live.aiSummary}
-                </p>
-
-                {context !== "ai" ? (
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/ai-analysis?open=${live.id}&wide=1`)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 10,
-                      width: "100%",
-                      marginTop: 14,
-                      padding: "10px 12px",
-                      borderRadius: 8,
-                      border: "1px solid rgba(224,122,95,0.3)",
-                      background: "rgba(224,122,95,0.08)",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      textAlign: "left",
-                    }}
-                  >
-                    <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-                      {t.incidentDetail.fullBreakdownAvailable}
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--color-high-text)", whiteSpace: "nowrap" }}>
-                      {t.incidentDetail.openFullAnalysis}
-                    </span>
-                  </button>
-                ) : (
-                  <>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
-                      <Field label={t.incidentDetail.estimatedVolume}>~{impact.volumeBbl} bbl</Field>
-                      <Field label={t.incidentDetail.detectionMethod}>{t.incidentDetail.detectionMethodValue}</Field>
-                      <Field label={t.incidentDetail.driftForecast24h}>
-                        {t.incidentDetail.driftToward(impact.driftKm24h, impact.driftCompass, impact.driftHeading)}
-                        {wind && (
-                          <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 4 }}>
-                            {t.incidentDetail.fromLiveWind}
-                          </span>
-                        )}
-                      </Field>
-                    </div>
-
-                    <div style={{ marginTop: 20 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)" }}>
-                          {t.incidentDetail.detectionConfidenceBreakdown}
-                        </div>
-                        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: deep.confidence.isReal ? "var(--accent)" : "var(--text-tertiary)" }}>
-                          {deep.confidence.isReal ? t.incidentDetail.measured : t.incidentDetail.illustrative}
-                        </span>
-                      </div>
-                      <ConfidenceGauges
-                        texture={deep.confidence.texture}
-                        edge={deep.confidence.edge}
-                        contrast={deep.confidence.contrast}
-                        composite={deep.confidence.composite}
-                      />
-                    </div>
-
-                    <div style={{ marginTop: 20 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                        <TrendingUp size={12} /> {t.incidentDetail.spillGrowthProjection}
-                      </div>
-                      <SpillProjectionChart series={deriveProjectionSeries(live)} />
-                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
-                        {t.incidentDetail.modeledFromGrowthRate}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 20 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                        <PieChartIcon size={12} /> {t.incidentDetail.spillSourceAttribution}
-                      </div>
-                      <SourceAttributionPie data={deriveSourceAttribution(t)} />
-                      <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 8 }}>
-                        {t.incidentDetail.unconfirmedAttribution}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 20 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                        {t.incidentDetail.aiRecommendedOptions}
-                      </div>
-                      <ResponseOptionsBar data={deriveResponseOptions(live, materials, t)} />
-                    </div>
-
-                    {deep.pipeline.length > 0 && (
-                      <div style={{ marginTop: 20 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                          {t.incidentDetail.processingPipeline}
-                        </div>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          {deep.pipeline.map((step) => (
-                            <div key={step.step} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12 }}>
-                              <span style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--text-primary)" }}>
-                                <CheckCircle2 size={12} color="var(--accent)" />
-                                {step.step}
-                              </span>
-                              <span style={{ color: "var(--text-tertiary)", fontSize: 11, fontVariantNumeric: "tabular-nums" }}>
-                                {(step.ms / 1000).toFixed(1)}s
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {similar.length > 0 && (
-                      <div style={{ marginTop: 20 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                          <History size={12} /> {t.incidentDetail.similarHistoricalIncidents}
-                        </div>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          {similar.map((s) => (
-                            <div key={s.displayId} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-secondary)" }}>
-                              <span>{s.displayId} · {s.location}</span>
-                              <span style={{ fontWeight: 600, color: "var(--accent)" }}>{t.incidentDetail.similarPct(s.similarity)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <div style={{ marginTop: 14 }}>
-                  <Field label={t.incidentDetail.estimatedCause}>
-                    <div style={{ marginTop: 8 }}>{live.estimatedCause}</div>
-                  </Field>
-                </div>
-                <Field label={t.incidentDetail.unconfirmedSourceHypothesis}>
-                  <div style={{ marginTop: 8 }}>
-                    {live.spillSource}
-                    <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 6 }}>
-                      {t.incidentDetail.unconfirmedPendingReview}
-                    </span>
-                  </div>
-                </Field>
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    background: "rgba(233,196,106,0.08)",
-                    border: "1px solid rgba(233,196,106,0.28)",
-                    fontSize: 12,
-                    color: "var(--text-secondary)",
-                    lineHeight: 1.45,
-                  }}
-                >
-                  <strong style={{ color: "var(--color-med-text)" }}>{t.incidentDetail.humanReviewRequired}</strong>
-                  <br />
-                  {t.incidentDetail.humanReviewRequiredBody}
-                </div>
-              </Section>
-
-              {context === "ai" && (
-                <Section title={t.incidentDetail.spillSourceDriftAnalysis} icon={<Crosshair size={14} />}>
-                  {weatherLoading && !sourceEstimate ? (
-                    <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                      {t.incidentDetail.reconstructingDrift}
-                    </div>
-                  ) : sourceEstimate?.available ? (
-                    <>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                        <Field label={t.incidentDetail.estimatedRuptureCoords}>
-                          <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "ui-monospace, monospace" }}>
-                            {sourceEstimate.lat.toFixed(4)}°N, {sourceEstimate.lng.toFixed(4)}°E
-                          </span>
-                        </Field>
-                        <Field label={t.incidentDetail.confidence}>
-                          <span style={{ color: "var(--accent)", fontWeight: 600 }}>{sourceEstimate.confidencePct}%</span>
-                        </Field>
-                        <Field label={t.incidentDetail.distanceDrifted}>
-                          {t.incidentDetail.distanceOverHours(sourceEstimate.distanceKm, sourceEstimate.hoursElapsed)}
-                        </Field>
-                        <Field label={t.incidentDetail.driftSpeed}>
-                          {t.incidentDetail.driftSpeedToward(sourceEstimate.driftSpeedKmh, compassLabel(sourceEstimate.downwindBearingDeg))}
-                        </Field>
-                        <Field label={t.incidentDetail.estimatedLeakRate}>~{sourceEstimate.leakRateBbl} bbl/h</Field>
-                        <Field label={t.incidentDetail.estimatedDepth}>~{sourceEstimate.depthM} m</Field>
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 12,
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          background: "rgba(185,28,28,0.06)",
-                          border: "1px solid rgba(185,28,28,0.22)",
-                          fontSize: 11,
-                          color: "var(--text-secondary)",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {t.incidentDetail.reverseCalculatedNote(sourceEstimate.bearingCompass, sourceEstimate.bearingDeg)}
-                      </div>
-                    </>
-                  ) : sourceEstimate?.reason === "too-stale" ? (
-                    <div style={{ fontSize: 12, color: "var(--text-tertiary)", lineHeight: 1.5 }}>
-                      {t.incidentDetail.tooStaleNote(sourceEstimate.hoursElapsed ?? 0)}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                      {t.incidentDetail.windDataUnavailable}
-                    </div>
-                  )}
-                </Section>
+        <section className="detail-section" aria-labelledby={`evidence-${live.id}`}>
+          <h3 id={`evidence-${live.id}`} className="detail-title"><Satellite size={16} aria-hidden="true" />{d.evidence}</h3>
+          {live.sarImageBase64 ? (
+            <div className="evidence-grid">
+              <figure>
+                {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery */}
+                <img src={`data:image/png;base64,${live.sarImageBase64}`} alt={d.originalSarAlt(live.displayId)} />
+                <figcaption>{d.originalSar}</figcaption>
+              </figure>
+              {live.sarOverlayBase64 && (
+                <figure>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery */}
+                  <img src={`data:image/png;base64,${live.sarOverlayBase64}`} alt={d.overlayAlt(live.displayId)} />
+                  <figcaption>{d.aiOverlay}</figcaption>
+                </figure>
               )}
+            </div>
+          ) : (
+            <p className="detail-empty">{live.detectionSource === "Manual report" ? d.noImageryManual : d.noImagery}</p>
+          )}
+          <dl className="fact-grid">
+            <Field label={d.estimatedArea}>{formatAreaM2(live.areaM2)} <Tag kind={measured ? "measured" : "estimate"}>{measured ? d.measuredTag : d.reportedTag}</Tag></Field>
+            <Field label={d.detectorScore}>
+              {measured ? <>{Math.round(live.aiProbability * 100)}% <Tag kind="measured">{d.measuredTag}</Tag></> : <span className="muted">{d.notMeasured}</span>}
+            </Field>
+          </dl>
+          {measured && <p className="detail-hint">{d.detectorScoreNote}</p>}
+        </section>
 
-              {vessel && (
-                <Section title={t.incidentDetail.relatedVessel} icon={<Ship size={14} />}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <Field label={t.incidentDetail.name}>{vessel.name}</Field>
-                    <Field label={t.incidentDetail.type}>{vessel.type}</Field>
-                    <Field label={t.incidentDetail.status}>{vessel.status}</Field>
-                    <Field label={t.incidentDetail.speed}>{vessel.speedKnots.toFixed(1)} kn</Field>
-                  </div>
-                </Section>
+        {live.aiSummary && (
+          <section className="detail-section">
+            <h3 className="detail-title">{d.summary}</h3>
+            <p className="detail-text">{live.aiSummary}</p>
+            <dl className="fact-grid">
+              <Field label={d.estimatedCause}>{live.estimatedCause || "—"}</Field>
+              <Field label={d.unconfirmedSourceHypothesis}>{t.spillSource[live.spillSource] ?? live.spillSource}</Field>
+            </dl>
+          </section>
+        )}
+
+        <div className="disclosures">
+          {(hasFeatures || (live.fetchMs != null && live.analyzeMs != null) || similar.length > 0) && (
+            <Disclosure title={d.analysisDetails} defaultOpen={context === "ai"}>
+              {hasFeatures && (
+                <>
+                  <h4 className="detail-subtitle">{d.featureSignals} <Tag kind="measured">{d.measuredTag}</Tag></h4>
+                  <ConfidenceGauges texture={live.texturePct!} edge={live.edgePct!} contrast={live.contrastPct!} composite={Math.round(live.aiProbability * 100)} />
+                </>
               )}
-
-              <Section title={t.incidentDetail.environmentalContext} icon={<CloudSun size={14} />}>
-                {weatherLoading && !wind && !sea ? (
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                    {t.incidentDetail.loadingLiveWeather}
-                  </div>
-                ) : wind || sea ? (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {wind && (
-                      <Field label={t.incidentDetail.wind}>
-                        {wind.windSpeedKnots} kn · {wind.windHeading}°
-                        <FreshnessNote staleMinutes={wind.staleMinutes} />
-                      </Field>
-                    )}
-                    {sea && (
-                      <Field label={t.incidentDetail.seaState}>
-                        {sea.seaState}
-                        <FreshnessNote staleMinutes={sea.staleMinutes} />
-                      </Field>
-                    )}
-                    {wind && (
-                      <Field label={t.incidentDetail.visibility}>
-                        {wind.visibilityKm === null ? "—" : `${wind.visibilityKm} km`}
-                        <FreshnessNote staleMinutes={wind.staleMinutes} />
-                      </Field>
-                    )}
-                    {sea && (
-                      <Field label={t.incidentDetail.waveHeight}>
-                        {sea.waveHeightM} m{sea.wavePeriodS === null ? "" : ` · ${sea.wavePeriodS}s`}
-                        <FreshnessNote staleMinutes={sea.staleMinutes} />
-                      </Field>
-                    )}
-                    {wind && (
-                      <Field label={t.incidentDetail.temperature}>
-                        {wind.temperatureC === null ? "—" : `${wind.temperatureC}°C`}
-                        <FreshnessNote staleMinutes={wind.staleMinutes} />
-                      </Field>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                    {t.incidentDetail.liveWeatherUnavailable}
-                  </div>
-                )}
-              </Section>
-
-              <Section title={t.incidentDetail.responseStatusTitle}>
-                <Field label={t.incidentDetail.currentStatus}>{live.responseStatus}</Field>
-              </Section>
-
-              {/* Human-in-the-loop decision — deliberately styled to stand out,
-                  this is the core product feature: AI never decides alone. */}
-              <div
-                style={{
-                  marginBottom: 18,
-                  borderRadius: 12,
-                  border: "1.5px solid var(--accent)",
-                  background: "var(--accent-soft)",
-                  padding: 16,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                  <div
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 8,
-                      background: "var(--accent)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--bg-elevated)",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <UserCheck size={17} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.03em", color: "var(--text-primary)" }}>
-                      {t.incidentDetail.humanInTheLoopDecision}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                      {t.incidentDetail.finalOperationalCall}
-                    </div>
-                  </div>
-                  {pending && (
-                    <span
-                      style={{
-                        flexShrink: 0,
-                        fontSize: 10,
-                        fontWeight: 700,
-                        letterSpacing: "0.05em",
-                        textTransform: "uppercase",
-                        color: "#fff",
-                        background: "var(--color-high-text)",
-                        borderRadius: 12,
-                        padding: "4px 9px",
-                      }}
-                    >
-                      {t.incidentDetail.awaiting}
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  <Field label={t.incidentDetail.decision}>
-                    {t.incidentDetail.humanDecision[live.humanDecision as keyof typeof t.incidentDetail.humanDecision] ?? HUMAN_DECISION_LABEL[live.humanDecision] ?? live.humanDecision}
-                  </Field>
-                  {live.humanDecisionBy && <Field label={t.incidentDetail.specialist}>{live.humanDecisionBy}</Field>}
-                  {live.humanDecisionAt && (
-                    <Field label={t.incidentDetail.decidedAt}>{formatDateTimeAZT(live.humanDecisionAt)} AZT</Field>
-                  )}
-                  {live.humanDecisionNote && <Field label={t.incidentDetail.notes}>{live.humanDecisionNote}</Field>}
-                </div>
-
-                {!canAct && (
-                  <div
-                    style={{
-                      marginTop: 14,
-                      fontSize: 12,
-                      color: "var(--text-secondary)",
-                      padding: "8px 10px",
-                      borderRadius: 8,
-                      background: "var(--surface-muted)",
-                      border: "1px solid var(--glass-border)",
-                    }}
-                  >
-                    {t.incidentDetail.viewOnlyAccess}
-                  </div>
-                )}
-
-                {canAct && pending && (
-                  <>
-                    <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <button type="button" disabled={!!actingOn} style={actionBtnStyle("primary")} onClick={() => run("confirm")}>
-                        <CheckCircle2 size={13} /> {t.incidentDetail.confirmIncident}
-                      </button>
-                      <button type="button" disabled={!!actingOn} style={actionBtnStyle("danger")} onClick={() => run("reject")}>
-                        <XCircle size={13} /> {t.incidentDetail.rejectIncident}
-                      </button>
-                      <button type="button" disabled={!!actingOn} style={actionBtnStyle("warn")} onClick={() => run("escalate")}>
-                        <AlertTriangle size={13} /> {t.incidentDetail.escalateAction}
-                      </button>
-                      <button type="button" disabled={!!actingOn} style={actionBtnStyle("neutral")} onClick={() => run("mark_cleaning")}>
-                        <Droplets size={13} /> {t.incidentDetail.markForCleaning}
-                      </button>
-                    </div>
-                    {actionError && (
-                      <div className="auth-error" role="alert" style={{ marginTop: 10 }}>
-                        {actionError}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {canAct && !pending && (live.status === "under_review" || live.status === "cleaning") && (
-                  <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: live.status === "under_review" ? "1fr 1fr" : "1fr", gap: 8 }}>
-                    {live.status === "under_review" && (
-                      <button type="button" disabled={!!actingOn} style={actionBtnStyle("neutral")} onClick={() => run("mark_cleaning")}>
-                        <Droplets size={13} /> {t.incidentDetail.markCleaningStarted}
-                      </button>
-                    )}
-                    <button type="button" disabled={!!actingOn} style={actionBtnStyle("primary")} onClick={() => run("resolve")}>
-                      <CheckCircle2 size={13} /> {t.incidentDetail.markResolved}
-                    </button>
-                  </div>
-                )}
-                {actionError && !pending && (
-                  <div className="auth-error" role="alert" style={{ marginTop: 10 }}>
-                    {actionError}
-                  </div>
-                )}
-              </div>
-
-              {context === "ai" && !pending && live.status !== "rejected" && (
-                <Section title={t.incidentDetail.aiVsTraditional} icon={<Scale size={14} />}>
-                  <MethodComparisonBar data={deriveMethodComparison(live, materials, t)} />
-                  <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
-                    {t.incidentDetail.traditionalNote}
-                  </div>
-                </Section>
+              {live.fetchMs != null && live.analyzeMs != null && (
+                <dl className="fact-grid">
+                  <Field label={d.pipelineSatelliteFetch}>{(live.fetchMs / 1000).toFixed(1)} s</Field>
+                  <Field label={d.pipelineAnalysis}>{(live.analyzeMs / 1000).toFixed(1)} s</Field>
+                </dl>
               )}
-
-              {!pending && (
-                <Section
-                  title={live.status === "rejected" ? t.incidentDetail.dismissalReport : t.incidentDetail.responseReport}
-                  icon={<ListChecks size={14} />}
-                >
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
-                    <Field label={t.incidentDetail.incidentLabel}>
-                      {live.displayId} · {live.location}
-                    </Field>
-                    <Field label={t.incidentDetail.affectedArea}>{formatAreaM2(live.areaM2)}</Field>
-                    <Field label={t.incidentDetail.reportPreparedBy}>{live.humanDecisionBy || t.incidentDetail.autoGenerated}</Field>
-                    <Field label={t.incidentDetail.reportDate}>{formatDateTimeAZT(new Date().toISOString())} AZT</Field>
-                  </div>
-
-                  {live.status !== "rejected" && (
-                    <>
-                      <div style={{ marginTop: 16 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                          {t.incidentDetail.equipmentCrew}
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                          <Field label={t.incidentDetail.boomDeployed}>{materials.boomMeters} m</Field>
-                          <Field label={t.incidentDetail.sorbentRequired}>
-                            {materials.sorbentKg} kg
-                            <span style={{ fontSize: 10, color: "var(--text-tertiary)", marginLeft: 4 }}>
-                              {t.incidentDetail.sorbentRatioNote(SORBENT_RATIO_G, materials.oilMassKg)}
-                            </span>
-                          </Field>
-                          <Field label={t.incidentDetail.skimmerUnits}>{materials.skimmerUnits}</Field>
-                          <Field label={t.incidentDetail.supportVessels}>
-                            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                              <Anchor size={12} /> {materials.vesselCount}
-                            </span>
-                          </Field>
-                          <Field label={t.incidentDetail.teamAssigned}>{materials.team}</Field>
-                          <Field label={t.incidentDetail.estimatedDuration}>{materials.durationHours} h</Field>
-                        </div>
-                      </div>
-
-                      <div style={{ marginTop: 16 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--text-tertiary)", marginBottom: 8 }}>
-                          {t.incidentDetail.responsePhases}
-                        </div>
-                        <div style={{ display: "grid", gap: 6 }}>
-                          {[
-                            { phase: t.incidentDetail.phaseMobilization, done: true },
-                            { phase: t.incidentDetail.phaseContainment, done: true },
-                            { phase: t.incidentDetail.phaseRecovery, done: live.status === "resolved" || live.status === "cleaning" },
-                            { phase: t.incidentDetail.phaseSiteRestoration, done: live.status === "resolved" },
-                          ].map((p) => (
-                            <div key={p.phase} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-                              {p.done ? (
-                                <CheckCircle2 size={12} color="var(--accent)" />
-                              ) : (
-                                <Loader2 size={12} color="var(--text-tertiary)" />
-                              )}
-                              <span style={{ color: p.done ? "var(--text-primary)" : "var(--text-tertiary)" }}>
-                                {p.phase}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div style={{ marginTop: 16, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", borderRadius: 8, background: "var(--surface-muted)" }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-secondary)" }}>
-                          <DollarSign size={13} /> {t.incidentDetail.estimatedResponseCost}
-                        </span>
-                        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
-                          ${materials.estimatedCostUsd.toLocaleString("en-US")}
-                        </span>
-                      </div>
-                    </>
-                  )}
-
-                  {canAct && (
-                    <button
-                      type="button"
-                      onClick={() => generatePdf(materials)}
-                      disabled={pdfState !== "idle"}
-                      style={{
-                        ...actionBtnStyle(pdfState === "ready" ? "primary" : "neutral"),
-                        marginTop: 16,
-                        cursor: pdfState === "idle" ? "pointer" : "default",
-                      }}
-                    >
-                      {pdfState === "generating" && <Loader2 size={13} className="spinner" />}
-                      {pdfState === "ready" && <CheckCircle2 size={13} />}
-                      {pdfState === "idle" && <FileDown size={13} />}
-                      {pdfState === "idle" && t.incidentDetail.generatePdfReport}
-                      {pdfState === "generating" && t.incidentDetail.generatingLabel}
-                      {pdfState === "ready" && t.incidentDetail.downloadedGenerateAgain}
-                    </button>
-                  )}
-                  {pdfState === "ready" && (
-                    <div style={{ fontSize: 10, color: "var(--text-tertiary)", marginTop: 6, textAlign: "center" }}>
-                      {t.incidentDetail.pdfSavedNote}
-                    </div>
-                  )}
-                </Section>
+              {similar.length > 0 && (
+                <>
+                  <h4 className="detail-subtitle">{d.similarHistoricalIncidents}</h4>
+                  <ul className="plain-list">
+                    {similar.map((s) => <li key={s.displayId}><span>{s.displayId} · {s.location}</span><span>{d.nearbyKm(s.distanceKm)}</span></li>)}
+                  </ul>
+                </>
               )}
-            </>
-          );
-        })();
+            </Disclosure>
+          )}
+
+          <Disclosure title={d.environmentalContext} tag={<Tag kind="measured">Open-Meteo</Tag>}>
+            {weatherLoading ? (
+              <p className="detail-empty" role="status">{d.loadingLiveWeather}</p>
+            ) : wind || sea ? (
+              <>
+                <dl className="fact-grid">
+                  <Field label={d.wind}>{wind ? `${wind.windSpeedKnots} kn · ${wind.windHeading}° ${compassLabel(wind.windHeading)}` : t.seaWeather.noData}</Field>
+                  <Field label={d.seaState}>{sea ? `${d.seaStates[sea.seaState]} · ${sea.waveHeightM} m` : t.seaWeather.noData}</Field>
+                  <Field label={d.visibility}>{wind?.visibilityKm != null ? `${wind.visibilityKm} km` : t.seaWeather.noData}</Field>
+                  <Field label={d.temperature}>{wind?.temperatureC != null ? `${wind.temperatureC}°C` : t.seaWeather.noData}</Field>
+                </dl>
+                <p className="detail-hint">{d.observedAt(formatWorkspaceTime((wind ?? sea)!.sourceTimestamp, lang), (wind ?? sea)!.staleMinutes)}</p>
+              </>
+            ) : (
+              <p className="detail-empty">{windIssue === "out-of-coverage" ? d.outOfCoverage : d.liveWeatherUnavailable}</p>
+            )}
+          </Disclosure>
+
+          <Disclosure title={d.spillSourceDriftAnalysis} tag={<Tag kind="calculation">{d.calculationTag}</Tag>}>
+            {weatherLoading ? (
+              <p className="detail-empty" role="status">{d.reconstructingDrift}</p>
+            ) : sourceEstimate?.available ? (
+              <>
+                <dl className="fact-grid">
+                  <Field label={d.estimatedRuptureCoords}><span className="mono">{sourceEstimate.lat.toFixed(4)}°N, {sourceEstimate.lng.toFixed(4)}°E</span></Field>
+                  <Field label={d.confidence}>{sourceEstimate.confidencePct}%</Field>
+                  <Field label={d.distanceDrifted}>{d.distanceOverHours(sourceEstimate.distanceKm, sourceEstimate.hoursElapsed)}</Field>
+                  <Field label={d.driftSpeed}>{d.driftSpeedToward(sourceEstimate.driftSpeedKmh, compassLabel(sourceEstimate.downwindBearingDeg))}</Field>
+                </dl>
+                <p className="detail-hint">{d.driftMethodNote}</p>
+              </>
+            ) : sourceEstimate?.reason === "too-stale" ? (
+              <p className="detail-empty">{d.tooStaleNote(sourceEstimate.hoursElapsed ?? 0)}</p>
+            ) : (
+              <p className="detail-empty">{windIssue === "out-of-coverage" ? d.outOfCoverage : d.windDataUnavailable}</p>
+            )}
+          </Disclosure>
+
+          {context === "ai" ? (
+            <Disclosure title={d.modelledOutlook} tag={<Tag kind="estimate">{d.estimateTag}</Tag>}>
+              <h4 className="detail-subtitle">{d.spillGrowthProjection}</h4>
+              <SpillProjectionChart series={deriveProjectionSeries(live)} />
+              <p className="detail-hint">{d.modeledFromGrowthRate}</p>
+              {!closed && (
+                <>
+                  <h4 className="detail-subtitle">{d.aiRecommendedOptions}</h4>
+                  <ResponseOptionsBar data={deriveResponseOptions(live, materials, t)} />
+                </>
+              )}
+            </Disclosure>
+          ) : (
+            <Link className="detail-link" href={`/ai-analysis?open=${encodeURIComponent(live.id)}`}>{d.openFullAnalysis}<ArrowUpRight size={15} aria-hidden="true" /></Link>
+          )}
+
+          {stage !== "rejected" && (
+            <Disclosure title={d.requirements} tag={<Tag kind="estimate">{d.estimateTag}</Tag>}>
+              <p className="detail-hint">{d.requirementsNote}</p>
+              <dl className="fact-grid">
+                <Field label={d.boomRequired}>{materials.boomMeters} m</Field>
+                <Field label={d.sorbentRequired}>{materials.sorbentKg} kg</Field>
+                <Field label={d.skimmerUnits}>{materials.skimmerUnits}</Field>
+                <Field label={d.supportVessels}>{materials.vesselCount}</Field>
+                <Field label={d.estimatedDuration}>{materials.durationHours} h</Field>
+                <Field label={d.costEstimate}>${materials.estimatedCostUsd.toLocaleString("en-US")}</Field>
+              </dl>
+              <p className="detail-hint">{d.sorbentRatioNote(SORBENT_RATIO_G, materials.oilMassKg)}</p>
+            </Disclosure>
+          )}
+
+          {vessel && (
+            <Disclosure title={d.relatedVessel} tag={<Tag kind="demo">{t.mapPanel.demoLabel}</Tag>}>
+              <dl className="fact-grid">
+                <Field label={d.name}><Ship size={14} aria-hidden="true" /> {vessel.name}</Field>
+                <Field label={d.type}>{vessel.type}</Field>
+                <Field label={d.speed}>{vessel.speedKnots.toFixed(1)} kn</Field>
+              </dl>
+            </Disclosure>
+          )}
+        </div>
+
+        {canAct && stage !== "pending" && stage !== "escalated" && (
+          <section className="detail-section">
+            <h3 className="detail-title"><FileDown size={16} aria-hidden="true" />{stage === "rejected" ? d.dismissalReport : d.responseReport}</h3>
+            <Button onClick={() => generatePdf(materials)} busy={pdf === "generating"}>
+              <FileDown size={16} aria-hidden="true" />{pdf === "ready" ? d.generateAgain : d.generatePdfReport}
+            </Button>
+            {pdf === "ready" && <p className="detail-hint" role="status">{d.pdfSavedNote}</p>}
+          </section>
+        )}
+      </div>
+    );
+  })();
 
   if (presentation === "docked") {
     if (!live) return null;
@@ -1301,14 +578,7 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
   }
 
   return (
-    <DetailPanel
-      open={!!live}
-      title={title}
-      subtitle={live?.title || live?.location}
-      onClose={onClose}
-      width={expanded ? "min(1100px, 96vw)" : 480}
-      variant={expanded ? "full" : "side"}
-    >
+    <DetailPanel open={!!live} title={title} subtitle={live?.title || live?.location} onClose={onClose} width={expanded ? "min(1100px, 96vw)" : 480} variant={expanded ? "full" : "side"}>
       {body}
     </DetailPanel>
   );

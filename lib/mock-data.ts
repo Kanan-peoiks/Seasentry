@@ -6,6 +6,7 @@
 // backend (Sentinel-1 scenes, detection model results, AIS, etc.)
 // ============================================================
 
+import { scanConfidence } from "./incident-metrics";
 import type {
   Incident,
   IncidentStats,
@@ -78,7 +79,8 @@ export type DashboardKpis = {
   highRisk: number;
   detectedAreaM2: number;
   cleanedAreaM2: number;
-  aiConfidence: number;
+  /** Mean detector score of measured SAR scans; null when none exist. */
+  aiConfidence: number | null;
 };
 
 export type KPIs = {
@@ -229,22 +231,20 @@ function isClosedStatus(status: IncidentStatus) {
 export function getDashboardKpis(incidents: Incident[]): DashboardKpis {
   const active = incidents.filter((i) => !isClosedStatus(i.status));
   const cleaned = incidents.filter(
-    (i) => i.status === "cleaning" || i.status === "resolved"
+    (i) => i.status === "resolved"
   );
   const highRisk = incidents.filter(
     (i) => i.risk === "HIGH" && !isClosedStatus(i.status)
   );
-  const avgConfidence =
-    incidents.length === 0
-      ? 0
-      : incidents.reduce((s, i) => s + i.aiProbability, 0) / incidents.length;
+  // Only measured SAR scans have a detector score; manual reports carry 0.
+  const avgConfidence = scanConfidence(incidents);
 
   return {
     activeIncidents: active.length,
     highRisk: highRisk.length,
     detectedAreaM2: active.reduce((s, i) => s + i.areaM2, 0),
     cleanedAreaM2: cleaned.reduce((s, i) => s + i.areaM2, 0),
-    aiConfidence: Math.round(avgConfidence * 100) / 100,
+    aiConfidence: avgConfidence === null ? null : Math.round(avgConfidence * 100) / 100,
   };
 }
 
@@ -255,7 +255,7 @@ export function getIncidentStats(incidents: Incident[]): IncidentStats {
     highRisk: incidents.filter(
       (i) => i.risk === "HIGH" && !isClosedStatus(i.status)
     ).length,
-    underReview: incidents.filter((i) => i.status === "under_review").length,
+    underReview: incidents.filter((i) => i.status === "detected" || (i.status === "under_review" && i.humanDecision !== "confirmed_spill")).length,
     resolved: incidents.filter((i) => i.status === "resolved").length,
   };
 }
@@ -265,12 +265,12 @@ function deriveReviewStatus(i: {
   humanDecision: HumanDecision;
 }): ReviewStatus {
   if (i.status === "rejected" || i.humanDecision === "false_positive") return "REJECTED";
+  if (i.status === "resolved") return "RESOLVED";
   if (i.status === "cleaning") return "CLEANING";
   if (i.humanDecision === "escalated") return "ESCALATED";
   if (
     i.humanDecision === "confirmed_spill" ||
-    i.humanDecision === "response_approved" ||
-    i.status === "resolved"
+    i.humanDecision === "response_approved"
   ) {
     return "CONFIRMED";
   }
@@ -306,9 +306,9 @@ export function getReportSummary(incidents: Incident[]): ReportSummary {
   const stats = getIncidentStats(incidents);
   return {
     totalIncidents: stats.total,
-    totalDetectedAreaM2: kpis.detectedAreaM2,
+    totalDetectedAreaM2: incidents.reduce((sum, incident) => sum + incident.areaM2, 0),
     totalCleanedAreaM2: kpis.cleanedAreaM2,
-    averageAiConfidence: Math.round(kpis.aiConfidence * 100),
+    averageAiConfidence: kpis.aiConfidence === null ? null : Math.round(kpis.aiConfidence * 100),
     highRiskCount: stats.highRisk,
     resolvedCount: stats.resolved,
     underReviewCount: stats.underReview,
@@ -326,11 +326,11 @@ export function buildAiAnalyses(incidents: Incident[]): AIAnalysis[] {
       location: inc.location,
       spillProbability: Math.round(inc.aiProbability * 100),
       estimatedAreaM2: inc.areaM2,
-      confidence: Math.max(55, Math.round(inc.aiProbability * 100) - 8),
+      confidence: Math.round(inc.aiProbability * 100),
       risk: inc.risk,
       possibleSource: inc.spillSource,
       estimatedCause: inc.estimatedCause,
-      analyzedAt: new Date(new Date(inc.timestamp).getTime() + 7 * 60000).toISOString(),
+      analyzedAt: inc.timestamp,
       summary: inc.aiSummary,
       reviewStatus: inc.reviewStatus,
       status: inc.status,
@@ -632,7 +632,7 @@ export const mockData = {
       humanDecision: "pending",
       responseStatus: "Newly detected",
     },
-  ] as any[]).map(hydrateIncident),
+  ] as Record<string, unknown>[]).map(hydrateIncident),
 
   riskZones: [
     {

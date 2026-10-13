@@ -1013,3 +1013,29 @@ html, body {
   .landing-bottom-inner h2 { font-size: 22px; }
 }
 
+
+/* ── Sea weather ── */
+.weather { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.weather-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.weather-place { display: flex; flex-direction: column; min-width: 0; }
+.weather-place strong { font-size: 14px; font-weight: 600; }
+.weather-place span { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.weather-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.weather-metric { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px; border: 1px solid var(--glass-border); border-radius: 10px; background: var(--surface-muted); }
+.weather-metric--skeleton { min-height: 104px; animation: skeletonPulse 1.4s ease-in-out infinite; }
+.weather-metric--warn { border-color: color-mix(in srgb, var(--color-med) 45%, transparent); background: var(--warning-soft); }
+.weather-metric--crit { border-color: color-mix(in srgb, var(--color-high) 45%, transparent); background: var(--danger-soft); }
+.weather-metric-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.weather-metric-label svg { color: var(--accent); }
+.weather-metric-value { display: inline-flex; align-items: center; gap: 4px; font-size: 20px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.weather-metric--warn .weather-metric-value svg { color: var(--color-med-text); }
+.weather-metric--crit .weather-metric-value svg { color: var(--color-high-text); }
+.weather-metric-detail { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.weather-metric-detail svg { color: var(--text-secondary); }
+.weather-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-secondary); }
+.weather-note { font-size: 12px; color: var(--text-secondary); }
+.weather-note--warn { color: var(--color-med-text); }
+.weather-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px; text-align: center; font-size: 14px; color: var(--text-secondary); }
+.weather-error > svg { color: var(--color-med-text); }
+@keyframes skeletonPulse { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
+@media (max-width: 380px) { .weather-grid { grid-template-columns: 1fr; } }

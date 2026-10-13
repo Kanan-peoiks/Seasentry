@@ -1023,19 +1023,19 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
                     )}
                     {wind && (
                       <Field label={t.incidentDetail.visibility}>
-                        {wind.visibilityKm} km
+                        {wind.visibilityKm === null ? "—" : `${wind.visibilityKm} km`}
                         <FreshnessNote staleMinutes={wind.staleMinutes} />
                       </Field>
                     )}
                     {sea && (
                       <Field label={t.incidentDetail.waveHeight}>
-                        {sea.waveHeightM} m · {sea.wavePeriodS}s period
+                        {sea.waveHeightM} m{sea.wavePeriodS === null ? "" : ` · ${sea.wavePeriodS}s`}
                         <FreshnessNote staleMinutes={sea.staleMinutes} />
                       </Field>
                     )}
                     {wind && (
                       <Field label={t.incidentDetail.temperature}>
-                        {wind.temperatureC}°C
+                        {wind.temperatureC === null ? "—" : `${wind.temperatureC}°C`}
                         <FreshnessNote staleMinutes={wind.staleMinutes} />
                       </Field>
                     )}

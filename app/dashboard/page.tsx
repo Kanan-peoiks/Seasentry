@@ -321,7 +321,7 @@ function DashboardContent() {
               </select>
             </div>
             <div className="panel-body">
-              <SeaWeatherWidget port={weatherPort} />
+              <SeaWeatherWidget lat={weatherPort.lat} lng={weatherPort.lng} label={weatherPort.name} />
             </div>
           </section>
         </div>

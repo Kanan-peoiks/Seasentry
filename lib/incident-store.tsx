@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -25,6 +26,7 @@ import type {
   IncidentStatus,
   ReviewStatus,
 } from "@/lib/types";
+import { useSession } from "@/lib/session";
 
 /** Fixed id for the operator-triggered live incident simulation. This is a
  * client-only demo feature — it is never sent to the backend, so decisions
@@ -118,8 +120,15 @@ type CreateIncidentResult = { ok: true; incident: Incident } | { ok: false; erro
 
 type IncidentStoreValue = {
   incidents: Incident[];
+  /** True only until the first successful or failed load. */
   loading: boolean;
+  /** A reload is running while earlier data stays visible. */
+  refreshing: boolean;
+  /** Message of the last failed load; earlier data, if any, is kept. */
   error: string | null;
+  /** ISO time of the last successful load. */
+  lastUpdated: string | null;
+  reloadIncidents: () => Promise<boolean>;
   vessels: ReturnType<typeof getEnrichedVessels>;
   riskZones: typeof mockData.riskZones;
   activity: typeof mockData.activityLog;
@@ -129,12 +138,14 @@ type IncidentStoreValue = {
   aiAnalyses: ReturnType<typeof buildAiAnalyses>;
   responseOps: ReturnType<typeof buildResponseOps>;
   getIncidentById: (id: string) => Incident | undefined;
+  /** Id of the incident whose decision request is in flight, if any. */
+  pendingActionId: string | null;
   applyHumanAction: (input: ApplyActionInput) => Promise<{ ok: boolean; error?: string }>;
   createIncident: (input: ManualIncidentInput) => Promise<CreateIncidentResult>;
   /** Injects an incident the caller already created through some other
    * endpoint (e.g. POST /detect's real-imagery scan) into local state, so it
-   * shows up immediately without a page reload — mirrors what createIncident
-   * does after its own POST /incidents call. */
+   * shows up immediately without a page reload. Replaces any copy with the
+   * same id instead of duplicating it. */
   ingestIncident: (raw: Record<string, unknown>) => Incident;
   hasLiveIncident: boolean;
   simulateLiveIncident: () => void;
@@ -216,78 +227,89 @@ function applyActionToIncident(
   }
 }
 
+/** Inserts or replaces by id, newest first, never duplicating a record. */
+function upsert(list: Incident[], incident: Incident): Incident[] {
+  return [incident, ...list.filter((i) => i.id !== incident.id)];
+}
+
+async function readError(res: Response, fallback: string): Promise<string> {
+  const data = await res.json().catch(() => null);
+  return typeof data?.error === "string" ? data.error : fallback;
+}
+
 export function IncidentStoreProvider({ children }: { children: ReactNode }) {
+  const { status: sessionStatus } = useSession();
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadState, setLoadState] = useState<{ loaded: boolean; refreshing: boolean; error: string | null; lastUpdated: string | null }>({ loaded: false, refreshing: false, error: null, lastUpdated: null });
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const pendingActionRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/incidents", { cache: "no-store" });
-        if (!res.ok) throw new Error(`Failed to load incidents (${res.status})`);
-        const data = await res.json();
-        if (cancelled) return;
-        setIncidents(Array.isArray(data) ? data.map(normalizeIncident) : []);
-        setError(null);
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load incidents.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+  const reloadIncidents = useCallback(async (): Promise<boolean> => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setLoadState((s) => ({ ...s, refreshing: true }));
+    try {
+      const res = await fetch("/api/incidents", { cache: "no-store", signal: controller.signal });
+      if (!res.ok) throw new Error(await readError(res, `Failed to load incidents (${res.status})`));
+      const data: unknown = await res.json();
+      if (controller.signal.aborted) return false;
+      const loaded = Array.isArray(data) ? data.map((raw) => normalizeIncident(raw as Record<string, unknown>)) : [];
+      // The demo scenario only exists locally; keep it across reloads.
+      setIncidents((prev) => {
+        const live = prev.find((i) => i.id === LIVE_INCIDENT_ID);
+        return live ? [live, ...loaded.filter((i) => i.id !== LIVE_INCIDENT_ID)] : loaded;
+      });
+      setLoadState({ loaded: true, refreshing: false, error: null, lastUpdated: new Date().toISOString() });
+      return true;
+    } catch (err) {
+      if (controller.signal.aborted) return false;
+      setLoadState((s) => ({ ...s, loaded: true, refreshing: false, error: err instanceof Error && err.message !== "Failed to fetch" ? err.message : "Could not reach the server." }));
+      return false;
+    }
   }, []);
 
-  const applyHumanAction = useCallback(async (input: ApplyActionInput) => {
-    // The live-simulation incident only ever exists in local state.
-    if (input.incidentId === LIVE_INCIDENT_ID) {
-      setIncidents((prev) =>
-        prev.map((inc) =>
-          inc.id === input.incidentId
-            ? applyActionToIncident(
-                inc,
-                input.action,
-                input.operatorName || "Operator",
-                input.note
-              )
-            : inc
-        )
-      );
-      return { ok: true };
+  // Incidents load only for a verified session, so public pages (landing,
+  // auth) never wait on or trigger the incident API.
+  useEffect(() => {
+    if (sessionStatus === "authenticated") {
+      void reloadIncidents();
+      return () => requestRef.current?.abort();
     }
+    if (sessionStatus === "unauthenticated") {
+      requestRef.current?.abort();
+      // Clearing another user's records after sign-out is a sync with the session.
+      setIncidents([]);
+      setLoadState({ loaded: false, refreshing: false, error: null, lastUpdated: null });
+    }
+  }, [sessionStatus, reloadIncidents]);
 
+  const applyHumanAction = useCallback(async (input: ApplyActionInput) => {
+    // One decision at a time: a double click must not send two requests.
+    if (pendingActionRef.current) return { ok: false, error: "A decision is already being saved." };
+    pendingActionRef.current = input.incidentId;
+    setPendingActionId(input.incidentId);
     try {
-      const res = await fetch(
-        `/api/incidents/${encodeURIComponent(input.incidentId)}/decision`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: input.action, note: input.note }),
-        }
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || `Decision failed (${res.status})`);
+      // The live-simulation incident only ever exists in local state.
+      if (input.incidentId === LIVE_INCIDENT_ID) {
+        setIncidents((prev) => prev.map((inc) => (inc.id === input.incidentId ? applyActionToIncident(inc, input.action, input.operatorName || "Operator", input.note) : inc)));
+        return { ok: true };
       }
+      const res = await fetch(`/api/incidents/${encodeURIComponent(input.incidentId)}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: input.action, note: input.note }),
+      });
+      if (!res.ok) throw new Error(await readError(res, `Decision failed (${res.status})`));
       const updated = normalizeIncident(await res.json());
-      setIncidents((prev) =>
-        prev.map((inc) => (inc.id === updated.id ? updated : inc))
-      );
+      setIncidents((prev) => prev.map((inc) => (inc.id === updated.id ? updated : inc)));
       return { ok: true };
     } catch (err) {
-      console.error("applyHumanAction failed:", err);
-      return {
-        ok: false,
-        error: err instanceof Error ? err.message : "Could not reach the backend.",
-      };
+      return { ok: false, error: err instanceof Error && err.message !== "Failed to fetch" ? err.message : "Could not reach the server." };
+    } finally {
+      pendingActionRef.current = null;
+      setPendingActionId(null);
     }
   }, []);
 
@@ -296,52 +318,42 @@ export function IncidentStoreProvider({ children }: { children: ReactNode }) {
     [incidents]
   );
 
-  const createIncident = useCallback(
-    async (input: ManualIncidentInput): Promise<CreateIncidentResult> => {
-      try {
-        const res = await fetch("/api/incidents", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: input.title,
-            location: input.location,
-            lat: input.lat,
-            lng: input.lng,
-            areaM2: input.areaM2,
-            aiProbability: 0,
-            risk: input.risk,
-            spillSource: input.spillSource,
-            detectionSource: "Manual report",
-            estimatedCause: input.estimatedCause,
-            aiSummary: input.notes || "Manually reported by a duty operator from the dashboard map.",
-          }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => null);
-          return { ok: false, error: data?.error || `Failed to create incident (${res.status})` };
-        }
-        const created = normalizeIncident(await res.json());
-        setIncidents((prev) => [created, ...prev]);
-        return { ok: true, incident: created };
-      } catch {
-        return { ok: false, error: "Could not reach the server." };
-      }
-    },
-    []
-  );
+  const createIncident = useCallback(async (input: ManualIncidentInput): Promise<CreateIncidentResult> => {
+    try {
+      const res = await fetch("/api/incidents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: input.title,
+          location: input.location,
+          lat: input.lat,
+          lng: input.lng,
+          areaM2: input.areaM2,
+          aiProbability: 0,
+          risk: input.risk,
+          spillSource: input.spillSource,
+          detectionSource: "Manual report",
+          estimatedCause: input.estimatedCause,
+          aiSummary: input.notes || "Manually reported by a duty operator from the dashboard map.",
+        }),
+      });
+      if (!res.ok) return { ok: false, error: await readError(res, `Failed to create incident (${res.status})`) };
+      const created = normalizeIncident(await res.json());
+      setIncidents((prev) => upsert(prev, created));
+      return { ok: true, incident: created };
+    } catch {
+      return { ok: false, error: "Could not reach the server." };
+    }
+  }, []);
 
   const ingestIncident = useCallback((raw: Record<string, unknown>): Incident => {
     const normalized = normalizeIncident(raw);
-    setIncidents((prev) => [normalized, ...prev]);
+    setIncidents((prev) => upsert(prev, normalized));
     return normalized;
   }, []);
 
   const simulateLiveIncident = useCallback(() => {
-    setIncidents((prev) =>
-      prev.some((i) => i.id === LIVE_INCIDENT_ID)
-        ? prev
-        : [makeLiveIncident(), ...prev]
-    );
+    setIncidents((prev) => (prev.some((i) => i.id === LIVE_INCIDENT_ID) ? prev : [makeLiveIncident(), ...prev]));
   }, []);
 
   const resolveLiveIncident = useCallback(() => {
@@ -350,40 +362,34 @@ export function IncidentStoreProvider({ children }: { children: ReactNode }) {
 
   const hasLiveIncident = incidents.some((i) => i.id === LIVE_INCIDENT_ID);
 
-  const value = useMemo<IncidentStoreValue>(() => {
-    const vessels = getEnrichedVessels(incidents);
-    return {
-      incidents,
-      loading,
-      error,
-      vessels,
-      riskZones: mockData.riskZones,
-      activity: mockData.activityLog,
-      kpis: getDashboardKpis(incidents),
-      stats: getIncidentStats(incidents),
-      report: getReportSummary(incidents),
-      aiAnalyses: buildAiAnalyses(incidents),
-      responseOps: buildResponseOps(incidents),
-      getIncidentById,
-      applyHumanAction,
-      createIncident,
-      ingestIncident,
-      hasLiveIncident,
-      simulateLiveIncident,
-      resolveLiveIncident,
-    };
-  }, [
+  const derived = useMemo(() => ({
+    vessels: getEnrichedVessels(incidents),
+    kpis: getDashboardKpis(incidents),
+    stats: getIncidentStats(incidents),
+    report: getReportSummary(incidents),
+    aiAnalyses: buildAiAnalyses(incidents),
+    responseOps: buildResponseOps(incidents),
+  }), [incidents]);
+
+  const value = useMemo<IncidentStoreValue>(() => ({
     incidents,
-    loading,
-    error,
+    loading: !loadState.loaded,
+    refreshing: loadState.refreshing && loadState.loaded,
+    error: loadState.error,
+    lastUpdated: loadState.lastUpdated,
+    reloadIncidents,
+    ...derived,
+    riskZones: mockData.riskZones,
+    activity: mockData.activityLog,
     getIncidentById,
+    pendingActionId,
     applyHumanAction,
     createIncident,
     ingestIncident,
     hasLiveIncident,
     simulateLiveIncident,
     resolveLiveIncident,
-  ]);
+  }), [incidents, loadState, reloadIncidents, derived, getIncidentById, pendingActionId, applyHumanAction, createIncident, ingestIncident, hasLiveIncident, simulateLiveIncident, resolveLiveIncident]);
 
   return (
     <IncidentStoreContext.Provider value={value}>

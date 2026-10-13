@@ -210,7 +210,6 @@ p { overflow-wrap: anywhere; }
 .record-card-header, .record-card-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; }
 .record-card p { color: var(--text-secondary); font-size: 14px; margin: 8px 0 12px; }
 .record-card-meta { color: var(--text-secondary); font-size: 12px; }
-.empty-action { margin-top: 12px; }
 
 @media (max-width: 1024px) { .workspace-stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 640px) {
@@ -244,14 +243,6 @@ html, body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-muted); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
-
-/* ── Utilities ── */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
-}
 
 /* ── Map ── */
 .map-panel { position: relative; width: 100%; height: 100%; min-height: inherit; }
@@ -293,74 +284,16 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 .spinner  { animation: spin 0.8s linear infinite; }
 
-/* ── Status pills ── */
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-.pill-high {
-  background: rgba(224, 122, 95, 0.12);
-  color: var(--color-high-text);
-  border-color: rgba(224, 122, 95, 0.28);
-}
-.pill-medium {
-  background: rgba(233, 196, 106, 0.16);
-  color: var(--color-med-text);
-  border-color: rgba(233, 196, 106, 0.32);
-}
-.pill-low {
-  background: rgba(168, 218, 220, 0.2);
-  color: var(--color-low-text);
-  border-color: rgba(168, 218, 220, 0.4);
-}
-.pill-detected,
-.pill-under_review {
-  background: rgba(129, 178, 154, 0.12);
-  color: var(--accent);
-  border-color: rgba(129, 178, 154, 0.28);
-}
-.pill-confirmed,
-.pill-response {
-  background: rgba(233, 196, 106, 0.16);
-  color: var(--color-med-text);
-  border-color: rgba(233, 196, 106, 0.32);
-}
-.pill-cleaning {
-  background: rgba(129, 178, 154, 0.1);
-  color: var(--accent);
-  border-color: rgba(129, 178, 154, 0.25);
-}
-.pill-resolved {
-  background: rgba(168, 218, 220, 0.2);
-  color: var(--color-low-text);
-  border-color: rgba(168, 218, 220, 0.4);
-}
-.pill-rejected {
-  background: rgba(108, 117, 125, 0.12);
-  color: var(--text-secondary);
-  border-color: rgba(108, 117, 125, 0.28);
-}
-.pill-alert { background: rgba(233, 196, 106, 0.16); color: var(--color-med-text); border-color: rgba(233, 196, 106, 0.32); }
-.pill-collected { background: rgba(168, 218, 220, 0.2); color: var(--color-low-text); border-color: rgba(168, 218, 220, 0.4); }
-.pill-converted { background: rgba(43, 45, 66, 0.04); color: var(--text-primary); border-color: var(--glass-border); }
-
-/* ── Row hover ── */
-.row-hover {
-  transition: background 0.15s ease;
-  border: 1px solid transparent;
-  border-radius: 6px;
-}
-.row-hover:hover {
-  background: var(--glass-bg-hover);
-}
-
+/* ── Badges ── Text always names the risk or status; colour only supports it. */
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; line-height: 1.5; border: 1px solid transparent; white-space: nowrap; }
+.pill-high { background: var(--danger-soft); color: var(--color-high-text); border-color: color-mix(in srgb, var(--color-high) 30%, transparent); }
+.pill-medium { background: var(--warning-soft); color: var(--color-med-text); border-color: color-mix(in srgb, var(--color-med) 30%, transparent); }
+.pill-low { background: var(--info-soft); color: var(--color-low-text); border-color: color-mix(in srgb, var(--color-low) 30%, transparent); }
+.pill-detected { background: var(--danger-soft); color: var(--color-high-text); border-color: color-mix(in srgb, var(--color-high) 22%, transparent); }
+.pill-under_review { background: var(--warning-soft); color: var(--color-med-text); border-color: color-mix(in srgb, var(--color-med) 22%, transparent); }
+.pill-cleaning { background: var(--info-soft); color: var(--color-low-text); border-color: color-mix(in srgb, var(--color-low) 25%, transparent); border-style: dashed; }
+.pill-resolved { background: var(--success-soft); color: var(--success-text); border-color: color-mix(in srgb, var(--success) 25%, transparent); }
+.pill-rejected { background: var(--surface-muted); color: var(--text-secondary); border-color: var(--glass-border); }
 /* ── Workspace shell ── */
 .dashboard-shell { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-base); }
 .dashboard-body { display: flex; flex: 1; min-height: 0; overflow: hidden; }
@@ -551,368 +484,10 @@ html, body {
   .form-grid { grid-template-columns: 1fr; }
   .layer-menu-panel { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; }
 }
-.panel {
-  background: var(--bg-elevated);
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-  /* A subtle lift so adjacent panels (e.g. dashboard's side-by-side Recent
-     Incidents / Activity Feed) read as distinct cards instead of blending
-     into the page background and each other — the border alone was too
-     faint against the near-white page background to do that on its own. */
-  box-shadow: var(--shadow-panel);
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--glass-border);
-  flex-shrink: 0;
-}
-
-.panel-title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0;
-  color: var(--text-primary);
-}
-
-.panel-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-/* Opt out of the default flex-fill/internal-scroll pattern above for
-   panels that ARE a page's main content (list/table pages) — they should
-   render at natural height and let .dashboard-scroll scroll the whole
-   page, instead of trapping the scroll inside one bordered card. Only the
-   dashboard's side-by-side twin widgets (Recent Incidents / Activity
-   Feed, which set height:100% to stay aligned) keep the default.
-
-   Both the panel itself AND its body need the override: .panel-body alone
-   isn't enough, because .panel (the flex item inside .dashboard-scroll)
-   still defaults to flex-shrink:1 with its own min-height:0 — the outer
-   box was the thing actually getting compressed, which is what silently
-   re-created an internal scroll region even with .panel-body "fixed". */
-.panel-static {
-  flex: 0 0 auto;
-  min-height: auto;
-}
-.panel-static > .panel-body {
-  flex: 0 0 auto;
-  min-height: auto;
-  overflow-y: visible;
-}
-
-/* ── Public landing page ── */
-.landing-page {
-  min-height: 100dvh;
-  background:
-    radial-gradient(ellipse 70% 45% at 80% 0%, rgba(129, 178, 154, 0.09), transparent 55%),
-    var(--bg-base);
-  color: var(--text-primary);
-}
-
-.landing-header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
-  backdrop-filter: blur(14px);
-  background: var(--glass-bg);
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.landing-header-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 14px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.landing-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-decoration: none;
-  color: inherit;
-}
-
-.landing-brand-name {
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.08em;
-  line-height: 1.1;
-}
-
-.landing-brand-tag {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 3px;
-}
-
-.landing-nav {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.landing-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  font-family: inherit;
-  border: 1px solid transparent;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  white-space: nowrap;
-}
-
-.landing-btn-ghost {
-  color: var(--text-secondary);
-  border-color: var(--glass-border);
-  background: transparent;
-}
-.landing-btn-ghost:hover {
-  color: var(--text-primary);
-  background: var(--glass-bg-hover);
-}
-
-.landing-btn-primary {
-  color: var(--bg-elevated);
-  background: var(--accent);
-  border-color: transparent;
-}
-.landing-btn-primary:hover { background: #6fa78d; }
-
-/* Deliberately the loudest button on the page — this is the one-click
-   path for a pitch audience (judges, etc.) to reach the dashboard with
-   no signup, so it needs to read as unmissable next to Login/Register. */
-.landing-btn-demo {
-  color: #fff;
-  background: var(--color-high);
-  border-color: transparent;
-  box-shadow: 0 4px 16px rgba(224, 122, 95, 0.4);
-}
-.landing-btn-demo:hover {
-  background: var(--color-high-text);
-  box-shadow: 0 6px 20px rgba(224, 122, 95, 0.5);
-}
-.landing-btn-demo:disabled {
-  opacity: 0.75;
-  box-shadow: none;
-}
-
-.landing-btn-lg {
-  padding: 12px 18px;
-  font-size: 14px;
-}
-
-.landing-hero {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 56px 24px 40px;
-}
-
-.landing-eyebrow {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 16px;
-}
-
-.landing-headline {
-  font-size: clamp(2rem, 4vw, 3.1rem);
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.12;
-  margin: 0 0 18px;
-}
-
-.landing-support {
-  font-size: 16px;
-  color: var(--text-secondary);
-  line-height: 1.65;
-  max-width: 520px;
-  margin: 0 0 28px;
-}
-
-.landing-cta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.landing-hitl-note {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  max-width: 460px;
-  line-height: 1.5;
-  margin: 0;
-  padding-left: 12px;
-  border-left: 2px solid rgba(129, 178, 154, 0.35);
-}
-
-.landing-section { padding: 56px 24px; }
-
-.landing-section-alt {
-  background: rgba(230, 226, 218, 0.45);
-  border-top: 1px solid var(--glass-border);
-  border-bottom: 1px solid var(--glass-border);
-}
-
-.landing-section-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-}
-
-.landing-section-title {
-  font-size: 24px;
-  font-weight: 650;
-  margin: 0 0 10px;
-  letter-spacing: -0.01em;
-}
-
-.landing-section-sub {
-  margin: 0 0 28px;
-  color: var(--text-secondary);
-  max-width: 560px;
-  line-height: 1.55;
-  font-size: 14px;
-}
-
-.landing-feature-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.landing-feature {
-  padding: 18px;
-  border: 1px solid var(--glass-border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-}
-
-.landing-feature-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-soft);
-  color: var(--accent);
-  margin-bottom: 14px;
-}
-
-.landing-feature h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.landing-feature p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
-
-.landing-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.landing-step-n {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-  margin-bottom: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.landing-step h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.landing-step p {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
-
-.landing-bottom-cta {
-  padding: 64px 24px;
-  text-align: center;
-}
-
-.landing-bottom-inner h2 {
-  margin: 0 0 12px;
-  font-size: 28px;
-  font-weight: 650;
-}
-
-.landing-bottom-inner p {
-  margin: 0 auto 24px;
-  max-width: 480px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
-
-.landing-footer {
-  border-top: 1px solid var(--glass-border);
-  padding: 28px 24px 36px;
-}
-
-.landing-footer-inner {
-  max-width: 1120px;
-  margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.landing-footer-meta {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 6px;
-}
-
-.landing-footer-links {
-  display: flex;
-  gap: 18px;
-}
-
-.landing-footer-links a {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 13px;
-}
-.landing-footer-links a:hover { color: var(--accent); }
-
+/* ── Panels ── */
+.panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--bg-elevated); border: 1px solid var(--glass-border); border-radius: 14px; box-shadow: var(--shadow-panel); }
+/* Page-level panels grow with their content; the page scrolls, not the card. */
+.panel-static { flex: 0 0 auto; min-height: auto; }
 /* ── Auth pages ── */
 .auth-page { min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; background: linear-gradient(180deg, #0C2133 0, #0C2133 220px, var(--bg-base) 220px); }
 .auth-page-loading { color: var(--text-secondary); font-size: 14px; }
@@ -943,7 +518,6 @@ html, body {
 .auth-link { font-size: 14px; color: var(--accent); }
 .auth-captcha { display: grid; gap: 8px; min-height: 65px; }
 .auth-submit { width: 100%; min-height: 46px; }
-.auth-error { font-size: 13px; color: var(--color-high-text); background: var(--danger-soft); border: 1px solid color-mix(in srgb, var(--color-high) 30%, transparent); border-radius: var(--radius-control); padding: 10px 12px; }
 .auth-switch { margin: 24px 0 0; text-align: center; font-size: 14px; color: var(--text-secondary); }
 .auth-switch a { color: var(--accent); font-weight: 600; }
 .auth-disclaimer { margin: 12px 0 0; font-size: 12px; color: var(--text-secondary); line-height: 1.5; text-align: center; }
@@ -958,38 +532,6 @@ html, body {
 .session-gate h1 { font-size: 20px; font-weight: 600; color: var(--text-primary); }
 .session-gate p { max-width: 420px; font-size: 14px; }
 .session-banner { padding: 12px 16px 0; }
-@media (max-width: 960px) {
-  .landing-hero {
-    padding-top: 36px;
-  }
-
-  .landing-feature-grid,
-  .landing-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .landing-header-inner { padding: 12px 16px; }
-  .landing-brand-tag { display: none; }
-
-  .landing-hero,
-  .landing-section,
-  .landing-bottom-cta {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .landing-feature-grid,
-  .landing-steps {
-    grid-template-columns: 1fr;
-  }
-
-  .landing-footer-inner { flex-direction: column; }
-  .landing-bottom-inner h2 { font-size: 22px; }
-}
-
-
 /* ── Sea weather ── */
 .weather { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .weather-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

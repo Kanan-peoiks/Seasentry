@@ -6,7 +6,7 @@ test("public landing is readable with reduced motion and no incident requests", 
   page.on("request", (request) => { if (new URL(request.url()).pathname === "/api/incidents") incidentRequests++; });
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByRole("button", { name: /guest|qonaq/i }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: /guest|qonaq|explore platform|platformanı/i }).first()).toBeVisible();
   expect(incidentRequests).toBe(0);
 });
 

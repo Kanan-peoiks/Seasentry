@@ -31,7 +31,8 @@ function basemapSpec(basemap: Basemap): { url: string; options: L.TileLayerOptio
     const time = modisDate();
     return {
       url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
-      options: { time, maxZoom: 19, maxNativeZoom: 9, attribution: `NASA EOSDIS GIBS · Terra MODIS ${time}` },
+      // 250 m pixels: past zoom 12 the upscaled level-9 tiles are only blur, so stop there (Leaflet clamps the view).
+      options: { time, maxZoom: 12, maxNativeZoom: 9, attribution: `NASA EOSDIS GIBS · Terra MODIS ${time}` },
     };
   }
   return {

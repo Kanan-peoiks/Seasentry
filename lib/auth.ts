@@ -2,11 +2,11 @@
 // SeaSentry Authentication
 // ============================================================
 // Client-side helpers for the real backend-backed auth flow.
-// The actual JWT lives in an httpOnly cookie set by the
-// /api/auth/* route handlers — it is never touched by this file
-// or exposed to client JS. localStorage here only caches the
-// user's display info (name/email) and a UX hint so pages can
-// avoid a login-form flash; middleware.ts is the real gate.
+// The JWT lives in an httpOnly cookie set by the /api/auth/*
+// route handlers and is never exposed to client JS. The session
+// state itself (checking / authenticated / unauthenticated /
+// unavailable) lives in lib/session.tsx; the user returned from
+// these helpers is handed to it via acceptUser().
 // ============================================================
 
 export const AUTH_STORAGE_KEY = "seasentry-auth";
@@ -32,220 +32,97 @@ export function isAdmin(user: AuthUser | null): boolean {
   return user?.role === "admin";
 }
 
-export type AuthResult =
-  | { ok: true; user: AuthUser }
-  | { ok: false; error: string };
+/** Keys into translations.auth so callers can show localized messages. */
+export type AuthValidationKey = "emailRequired" | "invalidEmail" | "passwordRequired" | "passwordTooShort" | "fullNameRequired" | "passwordsDoNotMatch";
 
-/** Login can't just succeed/fail — admin accounts pause on a 2FA code step
- * first (see AuthForm.tsx), so this is its own result type rather than
- * AuthResult. */
+/** "network" means the request never got a usable answer and can be retried
+ * as-is; "rejected" carries the server's own message (wrong password, taken
+ * email, expired code…). */
+export type AuthFailure = { kind: "network" } | { kind: "rejected"; message: string | null; status: number };
+
+export type AuthResult = { ok: true; user: AuthUser } | { ok: false; failure: AuthFailure };
+
+/** Login can pause on an emailed 2FA code for admin accounts. */
 export type LoginResult =
   | { status: "success"; user: AuthUser }
   | { status: "twoFactorRequired"; challengeId: string }
-  | { status: "error"; error: string };
+  | { status: "error"; failure: AuthFailure };
 
-function readStoredUser(): AuthUser | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(USER_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as AuthUser;
-  } catch {
-    return null;
-  }
-}
-
-export function isAuthenticated(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem(AUTH_STORAGE_KEY) === "true";
-}
-
-export function getCurrentUser(): AuthUser | null {
-  if (!isAuthenticated()) return null;
-  return readStoredUser();
-}
-
-export function validateEmail(email: string): string | null {
+export function validateEmail(email: string): AuthValidationKey | null {
   const value = email.trim();
-  if (!value) return "Email is required.";
+  if (!value) return "emailRequired";
   // Practical client-side check — not a security boundary.
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    return "Enter a valid email address.";
-  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "invalidEmail";
   return null;
 }
 
-export function validatePassword(password: string): string | null {
-  if (!password) return "Password is required.";
-  if (password.length < 8) return "Password must be at least 8 characters.";
+export function validatePassword(password: string): AuthValidationKey | null {
+  if (!password) return "passwordRequired";
+  if (password.length < 8) return "passwordTooShort";
   return null;
 }
 
-async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+async function rejected(res: Response): Promise<AuthFailure> {
   try {
     const data = await res.json();
-    return data?.error || fallback;
+    return { kind: "rejected", message: typeof data?.error === "string" ? data.error : null, status: res.status };
   } catch {
-    return fallback;
+    return { kind: "rejected", message: null, status: res.status };
   }
 }
 
-export async function login(
-  email: string,
-  password: string,
-  remember = false
-): Promise<LoginResult> {
-  const emailError = validateEmail(email);
-  if (emailError) return { status: "error", error: emailError };
+async function postJson(url: string, body?: unknown): Promise<Response> {
+  return fetch(url, {
+    method: "POST",
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
 
-  const passwordError = validatePassword(password);
-  if (passwordError) return { status: "error", error: passwordError };
+type SessionPayload = { requiresTwoFactor?: boolean; challengeId?: string; user?: AuthUser };
 
+async function sessionResult(res: Response): Promise<LoginResult> {
+  // A 5xx is the proxy or backend being unavailable, not a verdict on the input.
+  if (res.status >= 500) return { status: "error", failure: { kind: "network" } };
+  if (!res.ok) return { status: "error", failure: await rejected(res) };
+  const data = (await res.json()) as SessionPayload;
+  if (data.requiresTwoFactor && data.challengeId) return { status: "twoFactorRequired", challengeId: data.challengeId };
+  if (!data.user) return { status: "error", failure: { kind: "network" } };
+  return { status: "success", user: data.user };
+}
+
+export async function login(email: string, password: string, remember = false): Promise<LoginResult> {
   try {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim(), password, remember }),
-    });
-
-    if (!res.ok) {
-      return { status: "error", error: await parseErrorMessage(res, "Invalid email or password.") };
-    }
-
-    const data = (await res.json()) as { requiresTwoFactor?: boolean; challengeId?: string; user?: AuthUser };
-    if (data.requiresTwoFactor && data.challengeId) {
-      return { status: "twoFactorRequired", challengeId: data.challengeId };
-    }
-
-    const user = data.user as AuthUser;
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    return { status: "success", user };
+    return await sessionResult(await postJson("/api/auth/login", { email: email.trim(), password, remember }));
   } catch {
-    return { status: "error", error: "Could not reach the server. Please try again." };
+    return { status: "error", failure: { kind: "network" } };
   }
 }
 
-/** Completes an admin login after the 6-digit email code — see `login()`'s
- * "twoFactorRequired" result. `remember` must be passed again since this is
- * a separate request from the original password submission. */
-export async function verifyTwoFactor(
-  challengeId: string,
-  code: string,
-  remember = false
-): Promise<AuthResult> {
+/** Completes an admin login after the 6-digit email code. `remember` must be
+ * passed again since this is a separate request from the password step. */
+export async function verifyTwoFactor(challengeId: string, code: string, remember = false): Promise<LoginResult> {
   try {
-    const res = await fetch("/api/auth/verify-2fa", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ challengeId, code: code.trim(), remember }),
-    });
-
-    if (!res.ok) {
-      return { ok: false, error: await parseErrorMessage(res, "Invalid or expired code.") };
-    }
-
-    const { user } = (await res.json()) as { user: AuthUser };
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    return { ok: true, user };
+    return await sessionResult(await postJson("/api/auth/verify-2fa", { challengeId, code: code.trim(), remember }));
   } catch {
-    return { ok: false, error: "Could not reach the server. Please try again." };
+    return { status: "error", failure: { kind: "network" } };
   }
 }
 
-export async function register(
-  fullName: string,
-  email: string,
-  password: string,
-  confirmPassword: string,
-  turnstileToken: string
-): Promise<LoginResult> {
-  if (!fullName.trim()) {
-    return { status: "error", error: "Full name is required." };
-  }
-
-  const emailError = validateEmail(email);
-  if (emailError) return { status: "error", error: emailError };
-
-  const passwordError = validatePassword(password);
-  if (passwordError) return { status: "error", error: passwordError };
-
-  if (password !== confirmPassword) {
-    return { status: "error", error: "Passwords do not match." };
-  }
-
+export async function register(fullName: string, email: string, password: string, turnstileToken: string): Promise<LoginResult> {
   try {
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: fullName.trim(), email: email.trim(), password, turnstileToken }),
-    });
-
-    if (!res.ok) {
-      return { status: "error", error: await parseErrorMessage(res, "Could not create account.") };
-    }
-
-    // Rare: only if this email is in the backend's ADMIN_EMAILS list.
-    const data = (await res.json()) as { requiresTwoFactor?: boolean; challengeId?: string; user?: AuthUser };
-    if (data.requiresTwoFactor && data.challengeId) {
-      return { status: "twoFactorRequired", challengeId: data.challengeId };
-    }
-
-    const user = data.user as AuthUser;
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    return { status: "success", user };
+    return await sessionResult(await postJson("/api/auth/register", { name: fullName.trim(), email: email.trim(), password, turnstileToken }));
   } catch {
-    return { status: "error", error: "Could not reach the server. Please try again." };
+    return { status: "error", failure: { kind: "network" } };
   }
 }
 
-/** Signs in as a fixed public demo account — no credentials needed. Used by
- * the "Continue as guest" button so a pitch audience can reach the
- * dashboard in one click. */
+/** Signs in as the fixed public demo account (viewer role). */
 export async function loginAsDemo(): Promise<AuthResult> {
   try {
-    const res = await fetch("/api/auth/demo", { method: "POST" });
-    if (!res.ok) {
-      return { ok: false, error: await parseErrorMessage(res, "Could not start a demo session.") };
-    }
-    const { user } = (await res.json()) as { user: AuthUser };
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    return { ok: true, user };
+    const result = await sessionResult(await postJson("/api/auth/demo"));
+    return result.status === "success" ? { ok: true, user: result.user } : { ok: false, failure: result.status === "error" ? result.failure : { kind: "network" } };
   } catch {
-    return { ok: false, error: "Could not reach the server. Please try again." };
+    return { ok: false, failure: { kind: "network" } };
   }
-}
-
-/** Re-fetches the current user from the backend (the real source of truth
- * for role) and overwrites the localStorage cache. Called on every
- * AppShell mount so a stale cached role (e.g. left over from testing a
- * different account in the same browser) can never linger — the backend
- * enforces permissions regardless, but the UI should never show one thing
- * while the backend does another. Returns null (and clears the session) if
- * the cookie is missing/invalid. */
-export async function refreshCurrentUser(): Promise<AuthUser | null> {
-  try {
-    const res = await fetch("/api/auth/me", { cache: "no-store" });
-    if (!res.ok) {
-      logout();
-      return null;
-    }
-    const { user } = (await res.json()) as { user: AuthUser };
-    localStorage.setItem(AUTH_STORAGE_KEY, "true");
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    return user;
-  } catch {
-    // Network hiccup — keep whatever was cached rather than logging out.
-    return readStoredUser();
-  }
-}
-
-export function logout(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-  localStorage.removeItem(USER_STORAGE_KEY);
-  fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
 }

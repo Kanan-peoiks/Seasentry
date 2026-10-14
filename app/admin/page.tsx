@@ -1,52 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CheckCircle2, History, LogIn, MessageSquare, Reply, Send, ShieldCheck, Trash2, Undo2, UserCog, Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
-import { getCurrentUser, isAdmin, type UserRole } from "@/lib/auth";
+import Button from "@/components/ui/Button";
+import Notice from "@/components/ui/Notice";
+import DataState from "@/components/ui/DataState";
+import Dialog from "@/components/ui/Dialog";
+import FilterBar from "@/components/ui/FilterBar";
+import { isAdmin, type UserRole } from "@/lib/auth";
+import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
-import { Users, ShieldCheck, UserCog, LogIn, MessageSquare, Search, CheckCircle2, Undo2, Reply, Send, Loader2, History, Trash2 } from "lucide-react";
+import { formatWorkspaceTime } from "@/lib/workspace-url";
 
-type AdminUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  isDemo: boolean;
-  createdAt: string;
-};
+type AdminUser = { id: string; name: string; email: string; role: UserRole; isDemo: boolean; createdAt: string };
+type Stats = { totalUsers: number; totalOperators: number; totalAdmins: number; loginsToday: number; loginsLast7Days?: { date: string; count: number }[] };
+type FeedbackItem = { id: string; kind: "feedback" | "suggestion" | "question"; message: string; userName: string; userEmail: string; createdAt: string; resolved: boolean; adminReply?: string | null; repliedAt?: string | null };
+type AuditLogEntry = { id: string; actorName: string; actorEmail: string; action: string; targetUserId?: string | null; targetEmail?: string | null; detail?: string | null; createdAt: string };
+type Section<T> = { status: "loading" } | { status: "error" } | { status: "ok"; data: T };
 
-type Stats = {
-  totalUsers: number;
-  totalOperators: number;
-  totalAdmins: number;
-  loginsToday: number;
-  loginsLast7Days: { date: string; count: number }[];
-};
+async function readError(res: Response, fallback: string) {
+  const data = await res.json().catch(() => null);
+  return typeof data?.error === "string" ? data.error : fallback;
+}
 
-type FeedbackItem = {
-  id: string;
-  kind: "feedback" | "suggestion" | "question";
-  message: string;
-  userName: string;
-  userEmail: string;
-  createdAt: string;
-  resolved: boolean;
-  adminReply?: string | null;
-  repliedAt?: string | null;
-};
-
-type AuditLogEntry = {
-  id: string;
-  actorName: string;
-  actorEmail: string;
-  action: string;
-  targetUserId?: string | null;
-  targetEmail?: string | null;
-  detail?: string | null;
-  createdAt: string;
-};
+/** Each admin section loads independently, so one failing endpoint never
+ * blanks the whole page. */
+function useSection<T>(url: string, enabled: boolean) {
+  const [state, setState] = useState<Section<T>>({ status: "loading" });
+  const load = useCallback(() => {
+    fetch(url, { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        setState({ status: "ok", data: (await res.json()) as T });
+      })
+      .catch(() => setState({ status: "error" }));
+  }, [url]);
+  useEffect(() => { if (enabled) load(); }, [enabled, load]);
+  const retry = () => {
+    setState({ status: "loading" });
+    load();
+  };
+  return [state, setState, retry] as const;
+}
 
 export default function AdminPage() {
   return (
@@ -57,598 +55,284 @@ export default function AdminPage() {
 }
 
 function AdminContent() {
-  const { t } = useLanguage();
-  const admin = isAdmin(getCurrentUser());
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const { t, lang } = useLanguage();
+  const ad = t.admin;
+  const admin = isAdmin(useSession().user);
+  const [stats, , retryStats] = useSection<Stats>("/api/admin/stats", admin);
+  const [users, setUsers, retryUsers] = useSection<AdminUser[]>("/api/admin/users", admin);
+  const [feedback, setFeedback, retryFeedback] = useSection<FeedbackItem[]>("/api/feedback", admin);
+  const [audit, setAudit, retryAudit] = useSection<AuditLogEntry[]>("/api/admin/audit-log", admin);
   const [userSearch, setUserSearch] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [feedbackFilter, setFeedbackFilter] = useState<"open" | "resolved" | "all">("open");
-  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<FeedbackItem | null>(null);
 
-  useEffect(() => {
-    if (!admin) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
+  const userRows = useMemo(() => {
+    const rows = users.status === "ok" ? users.data : [];
+    const q = userSearch.trim().toLocaleLowerCase();
+    return q ? rows.filter((u) => `${u.name} ${u.email}`.toLocaleLowerCase().includes(q)) : rows;
+  }, [users, userSearch]);
+  const feedbackRows = feedback.status === "ok" ? feedback.data : [];
+  const filteredFeedback = feedbackFilter === "all" ? feedbackRows : feedbackRows.filter((f) => (feedbackFilter === "resolved" ? f.resolved : !f.resolved));
 
-    (async () => {
-      try {
-        const [statsRes, usersRes, feedbackRes, auditRes] = await Promise.all([
-          fetch("/api/admin/stats", { cache: "no-store" }),
-          fetch("/api/admin/users", { cache: "no-store" }),
-          fetch("/api/feedback", { cache: "no-store" }),
-          fetch("/api/admin/audit-log", { cache: "no-store" }),
-        ]);
-        if (!statsRes.ok || !usersRes.ok) throw new Error("Failed to load admin data.");
-        if (cancelled) return;
-        setStats(await statsRes.json());
-        setUsers(await usersRes.json());
-        setFeedback(feedbackRes.ok ? await feedbackRes.json() : []);
-        setAuditLog(auditRes.ok ? await auditRes.json() : []);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load admin data.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+  const refreshAudit = async () => {
+    const res = await fetch("/api/admin/audit-log", { cache: "no-store" }).catch(() => null);
+    if (res?.ok) setAudit({ status: "ok", data: await res.json() });
+  };
 
-    return () => {
-      cancelled = true;
-    };
-  }, [admin]);
-
-  const changeRole = async (userId: string, role: UserRole) => {
-    setUpdatingId(userId);
+  const changeRole = async (user: AdminUser, role: UserRole) => {
+    setBusyId(user.id);
+    setRowError(null);
     try {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to update role.");
-      }
-      const updated = await res.json();
-      setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
-
-      const auditRes = await fetch("/api/admin/audit-log", { cache: "no-store" });
-      if (auditRes.ok) setAuditLog(await auditRes.json());
+      const res = await fetch(`/api/admin/users/${user.id}/role`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) });
+      if (!res.ok) throw new Error(await readError(res, ad.roleUpdateFailed));
+      const updated: AdminUser = await res.json();
+      setUsers((prev) => (prev.status === "ok" ? { status: "ok", data: prev.data.map((u) => (u.id === user.id ? updated : u)) } : prev));
+      void refreshAudit();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update role.");
+      setRowError({ id: user.id, message: err instanceof Error && err.message !== "Failed to fetch" ? err.message : ad.roleUpdateFailed });
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
+
+  const updateFeedback = (updated: FeedbackItem) => setFeedback((prev) => (prev.status === "ok" ? { status: "ok", data: prev.data.map((f) => (f.id === updated.id ? updated : f)) } : prev));
 
   const toggleResolved = async (item: FeedbackItem) => {
-    setUpdatingId(item.id);
+    setBusyId(item.id);
+    setRowError(null);
     try {
-      const res = await fetch(`/api/feedback/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resolved: !item.resolved }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to update feedback.");
-      }
-      const updated = await res.json();
-      setFeedback((prev) => prev.map((f) => (f.id === item.id ? updated : f)));
+      const res = await fetch(`/api/feedback/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resolved: !item.resolved }) });
+      if (!res.ok) throw new Error(await readError(res, ad.updateFailed));
+      updateFeedback(await res.json());
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update feedback.");
+      setRowError({ id: item.id, message: err instanceof Error && err.message !== "Failed to fetch" ? err.message : ad.updateFailed });
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
 
-  const sendReply = async (feedbackId: string, message: string) => {
-    setUpdatingId(feedbackId);
+  /** Resolves true only when the reply was stored, so the draft survives a failure. */
+  const sendReply = async (item: FeedbackItem, message: string): Promise<boolean> => {
+    setBusyId(item.id);
+    setRowError(null);
     try {
-      const res = await fetch(`/api/feedback/${feedbackId}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to send reply.");
-      }
-      const updated = await res.json();
-      setFeedback((prev) => prev.map((f) => (f.id === feedbackId ? updated : f)));
+      const res = await fetch(`/api/feedback/${item.id}/reply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+      if (!res.ok) throw new Error(await readError(res, ad.replyFailed));
+      updateFeedback(await res.json());
+      return true;
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to send reply.");
+      setRowError({ id: item.id, message: err instanceof Error && err.message !== "Failed to fetch" ? err.message : ad.replyFailed });
+      return false;
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
 
-  const deleteFeedbackItem = async (feedbackId: string) => {
-    if (!confirm(t.admin.deleteConfirm)) return;
-    setUpdatingId(feedbackId);
+  const confirmDelete = async () => {
+    const item = pendingDelete;
+    if (!item) return;
+    setBusyId(item.id);
+    setRowError(null);
     try {
-      const res = await fetch(`/api/feedback/${feedbackId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Failed to delete.");
-      }
-      setFeedback((prev) => prev.filter((f) => f.id !== feedbackId));
+      const res = await fetch(`/api/feedback/${item.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await readError(res, ad.deleteFailed));
+      setFeedback((prev) => (prev.status === "ok" ? { status: "ok", data: prev.data.filter((f) => f.id !== item.id) } : prev));
+      setPendingDelete(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete.");
+      setRowError({ id: item.id, message: err instanceof Error && err.message !== "Failed to fetch" ? err.message : ad.deleteFailed });
+      setPendingDelete(null);
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
   };
-
-  const filteredUsers = useMemo(() => {
-    const q = userSearch.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
-    );
-  }, [users, userSearch]);
-
-  const unresolvedCount = feedback.filter((f) => !f.resolved).length;
-  const filteredFeedback = useMemo(() => {
-    if (feedbackFilter === "all") return feedback;
-    return feedback.filter((f) => (feedbackFilter === "resolved" ? f.resolved : !f.resolved));
-  }, [feedback, feedbackFilter]);
 
   if (!admin) {
     return (
       <div className="dashboard-scroll">
-        <PageHeader title={t.admin.title} subtitle={t.admin.accessDenied} />
-        <div className="panel panel-static">
-          <div className="panel-body" style={{ padding: 24, fontSize: 13, color: "var(--text-secondary)" }}>
-            {t.admin.accessDeniedBody}
-          </div>
-        </div>
+        <PageHeader title={ad.title} subtitle={ad.accessDenied} />
+        <Notice>{ad.accessDeniedBody}</Notice>
       </div>
     );
   }
 
+  const s = stats.status === "ok" ? stats.data : null;
+  const roleSelect = (u: AdminUser) => u.isDemo ? (
+    <span className="muted">{ad.fixed}</span>
+  ) : (
+    <label className="role-select">
+      <span className="sr-only">{ad.roleFor(u.name)}</span>
+      <select className="ui-select" name={`role-${u.id}`} value={u.role} disabled={busyId === u.id} onChange={(e) => void changeRole(u, e.target.value as UserRole)}>
+        <option value="viewer">{t.header.roleViewer}</option>
+        <option value="operator">{t.header.roleOperator}</option>
+        <option value="admin">{t.header.roleAdmin}</option>
+      </select>
+    </label>
+  );
+
   return (
     <div className="dashboard-scroll">
-      <PageHeader title={t.admin.title} subtitle={t.admin.subtitle} />
+      <PageHeader title={ad.title} subtitle={ad.subtitle} />
 
-      {error && (
-        <div className="auth-error" role="alert" style={{ marginBottom: 16 }}>
-          {error}
-        </div>
+      {stats.status === "error" && <Notice tone="error" action={<Button onClick={retryStats}>{t.session.retry}</Button>}>{ad.statsFailed}</Notice>}
+      <section className="workspace-stats" aria-label={ad.title}>
+        <StatCard label={ad.totalUsers} value={s?.totalUsers ?? "—"} icon={<Users size={17} />} />
+        <StatCard label={ad.operators} value={s?.totalOperators ?? "—"} icon={<UserCog size={17} />} />
+        <StatCard label={ad.admins} value={s?.totalAdmins ?? "—"} icon={<ShieldCheck size={17} />} />
+        <StatCard label={ad.loginsToday} value={s?.loginsToday ?? "—"} icon={<LogIn size={17} />} />
+      </section>
+      {s?.loginsLast7Days && s.loginsLast7Days.length > 0 && (
+        <section className="panel panel-static" aria-labelledby="logins-title">
+          <header className="section-heading"><div><h2 id="logins-title">{ad.loginsLast7Days}</h2></div></header>
+          <ol className="login-days">
+            {s.loginsLast7Days.map((d) => <li key={d.date}><strong>{d.count}</strong><span>{d.date}</span></li>)}
+          </ol>
+        </section>
       )}
 
-      {loading ? (
-        <div style={{ padding: 24, fontSize: 13, color: "var(--text-secondary)" }}>{t.common.loading}</div>
-      ) : (
-        <>
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0,1fr))", gap: 12 }} className="report-stat-grid">
-            <StatCard label={t.admin.totalUsers} value={stats?.totalUsers ?? 0} icon={<Users size={15} />} />
-            <StatCard label={t.admin.operators} value={stats?.totalOperators ?? 0} icon={<UserCog size={15} />} />
-            <StatCard label={t.admin.admins} value={stats?.totalAdmins ?? 0} icon={<ShieldCheck size={15} />} />
-            <StatCard label={t.admin.loginsToday} value={stats?.loginsToday ?? 0} icon={<LogIn size={15} />} />
-          </section>
-
-          <div className="panel panel-static" style={{ marginTop: 16 }}>
-            <div className="panel-header">
-              <span className="panel-title">{t.admin.loginsLast7Days}</span>
-            </div>
-            <div className="panel-body" style={{ padding: 16, display: "flex", gap: 16, flexWrap: "wrap" }}>
-              {(stats?.loginsLast7Days ?? []).length === 0 ? (
-                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.admin.noLoginsRecorded}</span>
-              ) : (
-                stats?.loginsLast7Days.map((d) => (
-                  <div key={d.date} style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 20, fontWeight: 700 }}>{d.count}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>{d.date}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="panel panel-static" style={{ marginTop: 16 }}>
-            <div className="panel-header">
-              <span className="panel-title">{t.admin.users}</span>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {t.admin.shownOfTotal(filteredUsers.length, users.length)}
-              </span>
-            </div>
-            <div style={{ padding: "12px 16px 0" }}>
-              <div style={{ position: "relative", maxWidth: 320 }}>
-                <Search
-                  size={14}
-                  style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)" }}
-                />
-                <input
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                  placeholder={t.admin.searchByNameEmail}
-                  style={{
-                    width: "100%",
-                    padding: "8px 10px 8px 32px",
-                    borderRadius: 8,
-                    border: "1px solid var(--glass-border)",
-                    background: "var(--bg-base)",
-                    color: "var(--text-primary)",
-                    fontSize: 13,
-                    fontFamily: "inherit",
-                  }}
-                />
-              </div>
-            </div>
-            <div className="panel-body" style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--text-tertiary)", fontSize: 11 }}>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colName}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colEmail}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colRole}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colJoined}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colAction}</th>
+      <section className="panel panel-static" aria-labelledby="users-title">
+        <header className="section-heading">
+          <div><h2 id="users-title"><Users size={16} aria-hidden="true" /> {ad.users}</h2><p>{users.status === "ok" ? ad.shownOfTotal(userRows.length, users.data.length) : ad.usersHint}</p></div>
+        </header>
+        <div className="panel-pad panel-pad--tight"><FilterBar search={userSearch} onSearchChange={setUserSearch} searchPlaceholder={ad.searchByNameEmail} searchLabel={t.common.search} /></div>
+        <DataState loading={users.status === "loading"} error={users.status === "error" ? ad.usersFailed : null} empty={users.status === "ok" && userRows.length === 0} onRetry={retryUsers}>
+          <div className="table-scroll desktop-records">
+            <table className="data-table">
+              <caption className="sr-only">{ad.users}</caption>
+              <thead><tr><th scope="col">{ad.colName}</th><th scope="col">{ad.colEmail}</th><th scope="col">{ad.colJoined}</th><th scope="col">{ad.colRole}</th></tr></thead>
+              <tbody>
+                {userRows.map((u) => (
+                  <tr key={u.id}>
+                    <td>{u.name}{u.isDemo && <span className="cell-secondary">{ad.demoAccount}</span>}</td>
+                    <td>{u.email}</td>
+                    <td>{formatWorkspaceTime(u.createdAt, lang)}</td>
+                    <td>{roleSelect(u)}{rowError?.id === u.id && <span className="ui-field-error" role="alert">{rowError.message}</span>}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ padding: "24px 12px", textAlign: "center", color: "var(--text-secondary)" }}>
-                        {users.length === 0
-                          ? t.admin.noUsersYet
-                          : t.common.noResultsFor(userSearch.trim())}
-                      </td>
-                    </tr>
-                  )}
-                  {filteredUsers.map((u) => (
-                    <tr key={u.id} style={{ borderTop: "1px solid var(--border-muted)" }}>
-                      <td style={{ padding: "10px 12px" }}>
-                        {u.name} {u.isDemo && <span style={{ color: "var(--text-tertiary)" }}>(demo)</span>}
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>{u.email}</td>
-                      <td style={{ padding: "10px 12px", textTransform: "capitalize" }}>{u.role}</td>
-                      <td style={{ padding: "10px 12px" }}>{new Date(u.createdAt).toLocaleDateString()}</td>
-                      <td style={{ padding: "10px 12px" }}>
-                        {u.isDemo ? (
-                          <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{t.admin.fixed}</span>
-                        ) : (
-                          <select
-                            value={u.role}
-                            disabled={updatingId === u.id}
-                            onChange={(e) => changeRole(u.id, e.target.value as UserRole)}
-                            style={{
-                              padding: "6px 8px",
-                              borderRadius: 6,
-                              border: "1px solid var(--glass-border)",
-                              background: "var(--bg-base)",
-                              color: "var(--text-primary)",
-                              fontSize: 12,
-                              fontFamily: "inherit",
-                            }}
-                          >
-                            <option value="viewer">viewer</option>
-                            <option value="operator">operator</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
+          <div className="mobile-records">
+            {userRows.map((u) => (
+              <article className="record-card" key={u.id}>
+                <div className="record-card-header"><strong>{u.name}</strong>{roleSelect(u)}</div>
+                <p>{u.email}</p>
+                <div className="record-card-meta"><span>{ad.colJoined}: {formatWorkspaceTime(u.createdAt, lang)}</span></div>
+                {rowError?.id === u.id && <span className="ui-field-error" role="alert">{rowError.message}</span>}
+              </article>
+            ))}
+          </div>
+        </DataState>
+      </section>
 
-          <div className="panel panel-static" style={{ marginTop: 16 }}>
-            <div className="panel-header">
-              <span className="panel-title">
-                <History size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-                {t.admin.auditLog}
-              </span>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {t.admin.roleChangesRecorded(auditLog.length)}
-              </span>
-            </div>
-            <div className="panel-body" style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "var(--text-tertiary)", fontSize: 11 }}>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colWhen}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colAdmin}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colActionAudit}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colTargetUser}</th>
-                    <th style={{ padding: "8px 12px" }}>{t.admin.colChange}</th>
+      <section className="panel panel-static" aria-labelledby="feedback-title">
+        <header className="section-heading">
+          <div><h2 id="feedback-title"><MessageSquare size={16} aria-hidden="true" /> {ad.feedback}</h2><p>{ad.openTotal(feedbackRows.filter((f) => !f.resolved).length, feedbackRows.length)}</p></div>
+          <div className="segmented" role="group" aria-label={ad.feedback}>
+            {(["open", "resolved", "all"] as const).map((f) => (
+              <button key={f} type="button" aria-pressed={feedbackFilter === f} onClick={() => setFeedbackFilter(f)}>{f === "open" ? ad.filterOpen : f === "resolved" ? ad.filterResolved : ad.filterAll}</button>
+            ))}
+          </div>
+        </header>
+        <DataState loading={feedback.status === "loading"} error={feedback.status === "error" ? ad.feedbackFailed : null} empty={feedback.status === "ok" && filteredFeedback.length === 0} onRetry={retryFeedback}>
+          <ul className="feedback-list">
+            {filteredFeedback.map((f) => (
+              <FeedbackRow key={f.id} item={f} busy={busyId === f.id} error={rowError?.id === f.id ? rowError.message : null} onToggleResolved={() => void toggleResolved(f)} onSendReply={(message) => sendReply(f, message)} onDelete={() => setPendingDelete(f)} />
+            ))}
+          </ul>
+        </DataState>
+      </section>
+
+      <section className="panel panel-static" aria-labelledby="audit-title">
+        <header className="section-heading"><div><h2 id="audit-title"><History size={16} aria-hidden="true" /> {ad.auditLog}</h2><p>{audit.status === "ok" ? ad.roleChangesRecorded(audit.data.length) : ad.auditHint}</p></div></header>
+        <DataState loading={audit.status === "loading"} error={audit.status === "error" ? ad.auditFailed : null} empty={audit.status === "ok" && audit.data.length === 0} onRetry={retryAudit}>
+          <div className="table-scroll">
+            <table className="data-table">
+              <caption className="sr-only">{ad.auditLog}</caption>
+              <thead><tr><th scope="col">{ad.colWhen}</th><th scope="col">{ad.colAdmin}</th><th scope="col">{ad.colTargetUser}</th><th scope="col">{ad.colChange}</th></tr></thead>
+              <tbody>
+                {(audit.status === "ok" ? audit.data : []).map((e) => (
+                  <tr key={e.id}>
+                    <td>{formatWorkspaceTime(e.createdAt, lang)}</td>
+                    <td>{e.actorName}<span className="cell-secondary">{e.actorEmail}</span></td>
+                    <td>{e.targetEmail ?? "—"}</td>
+                    <td>{e.detail ?? e.action.replace("_", " ")}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {auditLog.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={{ padding: "24px 12px", textAlign: "center", color: "var(--text-secondary)" }}>
-                        {t.admin.noRoleChanges}
-                      </td>
-                    </tr>
-                  )}
-                  {auditLog.map((entry) => (
-                    <tr key={entry.id} style={{ borderTop: "1px solid var(--border-muted)" }}>
-                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap", color: "var(--text-secondary)" }}>
-                        {new Date(entry.createdAt).toLocaleString()}
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        {entry.actorName} <span style={{ color: "var(--text-tertiary)" }}>({entry.actorEmail})</span>
-                      </td>
-                      <td style={{ padding: "10px 12px", textTransform: "capitalize" }}>
-                        {entry.action.replace("_", " ")}
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>{entry.targetEmail ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>{entry.detail ?? "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </DataState>
+      </section>
 
-          <div className="panel panel-static" style={{ marginTop: 16 }}>
-            <div className="panel-header">
-              <span className="panel-title">
-                <MessageSquare size={13} style={{ verticalAlign: -2, marginRight: 6 }} />
-                {t.admin.feedback}
-              </span>
-              <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                {t.admin.openTotal(unresolvedCount, feedback.length)}
-              </span>
-            </div>
-            <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
-              {(["open", "resolved", "all"] as const).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setFeedbackFilter(f)}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 999,
-                    border: "1px solid var(--glass-border)",
-                    background: feedbackFilter === f ? "var(--accent)" : "transparent",
-                    color: feedbackFilter === f ? "#fff" : "var(--text-secondary)",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {f === "open" ? t.admin.filterOpen : f === "resolved" ? t.admin.filterResolved : t.admin.filterAll}
-                </button>
-              ))}
-            </div>
-            <div className="panel-body" style={{ display: "grid", gap: 10, padding: 16 }}>
-              {filteredFeedback.length === 0 ? (
-                <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t.admin.nothingHere}</span>
-              ) : (
-                filteredFeedback.map((f) => (
-                  <FeedbackRow
-                    key={f.id}
-                    item={f}
-                    busy={updatingId === f.id}
-                    onToggleResolved={() => toggleResolved(f)}
-                    onSendReply={(message) => sendReply(f.id, message)}
-                    onDelete={() => deleteFeedbackItem(f.id)}
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
+      <Dialog
+        open={!!pendingDelete}
+        variant="center"
+        width={420}
+        title={ad.deleteTitle}
+        subtitle={ad.deleteConfirm}
+        onClose={() => setPendingDelete(null)}
+        footer={<>
+          <Button onClick={() => setPendingDelete(null)}>{ad.cancel}</Button>
+          <Button variant="danger" busy={!!pendingDelete && busyId === pendingDelete.id} onClick={() => void confirmDelete()}><Trash2 size={16} aria-hidden="true" />{ad.delete}</Button>
+        </>}
+      >
+        {pendingDelete && <blockquote className="quote">{pendingDelete.message}</blockquote>}
+      </Dialog>
     </div>
   );
 }
 
-function FeedbackRow({
-  item,
-  busy,
-  onToggleResolved,
-  onSendReply,
-  onDelete,
-}: {
-  item: FeedbackItem;
-  busy: boolean;
-  onToggleResolved: () => void;
-  onSendReply: (message: string) => void;
-  onDelete: () => void;
-}) {
-  const { t } = useLanguage();
-  const [replyDraft, setReplyDraft] = useState("");
+function FeedbackRow({ item, busy, error, onToggleResolved, onSendReply, onDelete }: { item: FeedbackItem; busy: boolean; error: string | null; onToggleResolved: () => void; onSendReply: (message: string) => Promise<boolean>; onDelete: () => void }) {
+  const { t, lang } = useLanguage();
+  const ad = t.admin;
+  const [draft, setDraft] = useState("");
   const [replying, setReplying] = useState(false);
+  const kindLabel = item.kind === "feedback" ? t.account.kindFeedback : item.kind === "suggestion" ? t.account.kindSuggestion : t.account.kindQuestion;
 
-  const handleSend = () => {
-    if (!replyDraft.trim()) return;
-    onSendReply(replyDraft.trim());
-    setReplyDraft("");
-    setReplying(false);
+  const handleSend = async () => {
+    if (!draft.trim()) return;
+    if (await onSendReply(draft.trim())) {
+      setDraft("");
+      setReplying(false);
+    }
   };
 
   return (
-    <div
-      style={{
-        padding: 12,
-        borderRadius: 8,
-        border: "1px solid var(--glass-border)",
-        background: item.resolved ? "transparent" : "var(--surface-muted)",
-        opacity: item.resolved ? 0.85 : 1,
-      }}
-    >
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, gap: 8 }}>
-            <span style={{ fontWeight: 650, textTransform: "capitalize" }}>
-              {item.kind === "feedback" ? t.account.kindFeedback : item.kind === "suggestion" ? t.account.kindSuggestion : t.account.kindQuestion}
-            </span>
-            <span style={{ color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-              {item.userName} · {new Date(item.createdAt).toLocaleString()}
-            </span>
-          </div>
-          <div style={{ fontSize: 13 }}>{item.message}</div>
-
-          {item.adminReply && (
-            <div
-              style={{
-                marginTop: 10,
-                padding: "8px 12px",
-                borderRadius: 8,
-                borderLeft: "3px solid var(--accent)",
-                background: "var(--bg-elevated)",
-                fontSize: 12.5,
-              }}
-            >
-              <div style={{ color: "var(--text-tertiary)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                {t.admin.yourReply}{item.repliedAt ? ` · ${new Date(item.repliedAt).toLocaleString()}` : ""}
-              </div>
-              {item.adminReply}
-            </div>
-          )}
-
-          {replying && (
-            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-              <textarea
-                autoFocus
-                value={replyDraft}
-                onChange={(e) => setReplyDraft(e.target.value)}
-                placeholder={t.admin.replyPlaceholder}
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid var(--glass-border)",
-                  background: "var(--bg-base)",
-                  color: "var(--text-primary)",
-                  fontSize: 13,
-                  fontFamily: "inherit",
-                  minHeight: 64,
-                  resize: "vertical",
-                }}
-              />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={busy || !replyDraft.trim()}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    border: "none",
-                    background: "var(--accent)",
-                    color: "#fff",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {busy ? <Loader2 size={13} className="spinner" /> : <Send size={13} />}
-                  {t.admin.sendReply}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReplying(false)}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 6,
-                    border: "1px solid var(--glass-border)",
-                    background: "transparent",
-                    color: "var(--text-secondary)",
-                    fontSize: 12,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {t.admin.cancel}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
-          {!item.adminReply && !replying && (
-            <button
-              type="button"
-              onClick={() => setReplying(true)}
-              title={t.admin.replyByEmail}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "6px 10px",
-                borderRadius: 6,
-                border: "1px solid var(--glass-border)",
-                background: "transparent",
-                color: "var(--accent)",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                whiteSpace: "nowrap",
-              }}
-            >
-              <Reply size={13} />
-              {t.admin.reply}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={onToggleResolved}
-            disabled={busy}
-            title={item.resolved ? t.admin.reopen : t.admin.markResolved}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 10px",
-              borderRadius: 6,
-              border: "1px solid var(--glass-border)",
-              background: "transparent",
-              color: item.resolved ? "var(--text-secondary)" : "var(--accent)",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {item.resolved ? <Undo2 size={13} /> : <CheckCircle2 size={13} />}
-            {item.resolved ? t.admin.reopen : t.admin.markResolved}
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={busy}
-            title={t.admin.delete}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 10px",
-              borderRadius: 6,
-              border: "1px solid var(--glass-border)",
-              background: "transparent",
-              color: "var(--color-high-text)",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              whiteSpace: "nowrap",
-            }}
-          >
-            <Trash2 size={13} />
-            {t.admin.delete}
-          </button>
-        </div>
+    <li className={`feedback-item${item.resolved ? " feedback-item--resolved" : ""}`}>
+      <div className="feedback-meta">
+        <span className="provenance">{kindLabel}</span>
+        <span>{item.userName} · {item.userEmail}</span>
+        <span>{formatWorkspaceTime(item.createdAt, lang)}</span>
       </div>
-    </div>
+      <p className="feedback-message">{item.message}</p>
+      {item.adminReply && (
+        <div className="feedback-reply">
+          <span>{ad.yourReply}{item.repliedAt ? ` · ${formatWorkspaceTime(item.repliedAt, lang)}` : ""}</span>
+          <p>{item.adminReply}</p>
+        </div>
+      )}
+      {replying && (
+        <div className="feedback-compose">
+          <label className="ui-field">
+            {ad.replyLabel}
+            <textarea className="ui-textarea" name={`reply-${item.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={ad.replyPlaceholder} autoFocus />
+          </label>
+          <div className="feedback-actions">
+            <Button variant="primary" onClick={() => void handleSend()} busy={busy} disabled={!draft.trim()}><Send size={15} aria-hidden="true" />{ad.sendReply}</Button>
+            <Button variant="ghost" onClick={() => setReplying(false)} disabled={busy}>{ad.cancel}</Button>
+          </div>
+        </div>
+      )}
+      {error && <Notice tone="error">{error}</Notice>}
+      {!replying && (
+        <div className="feedback-actions">
+          {!item.adminReply && <Button onClick={() => setReplying(true)}><Reply size={15} aria-hidden="true" />{ad.reply}</Button>}
+          <Button onClick={onToggleResolved} busy={busy}>{item.resolved ? <Undo2 size={15} aria-hidden="true" /> : <CheckCircle2 size={15} aria-hidden="true" />}{item.resolved ? ad.reopen : ad.markResolved}</Button>
+          <Button variant="ghost" onClick={onDelete} disabled={busy}><Trash2 size={15} aria-hidden="true" />{ad.delete}</Button>
+        </div>
+      )}
+    </li>
   );
 }

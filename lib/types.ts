@@ -135,7 +135,7 @@ export type ReportSummary = {
   totalIncidents: number;
   totalDetectedAreaM2: number;
   totalCleanedAreaM2: number;
-  averageAiConfidence: number;
+  averageAiConfidence: number | null;
   highRiskCount: number;
   resolvedCount: number;
   underReviewCount: number;

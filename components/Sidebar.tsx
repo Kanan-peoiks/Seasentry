@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, AlertTriangle, Ship, Brain, Siren, FileBarChart, UserCircle, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, AlertTriangle, Ship, Brain, Siren, FileBarChart, UserCircle, ShieldCheck, Satellite } from "lucide-react";
 import { NAV_ROUTES, type NavId } from "@/lib/nav";
 import { useLanguage } from "@/lib/useLanguage";
 import type { Translations } from "@/lib/i18n";
@@ -35,6 +35,8 @@ export function WorkspaceNav({ active, collapsed = false, showAdmin = false, onN
 
   return (
     <nav id={id} className={`workspace-nav${collapsed ? " workspace-nav--collapsed" : ""}`} aria-label={t.sidebar.navigation}>
+      <div className="workspace-nav-primary">
+      {!collapsed && <p className="workspace-nav-caption">{t.sidebar.navigation}</p>}
       <ul>
         {NAV.filter((item) => item.id !== "admin" || showAdmin).map((item) => {
           const href = NAV_ROUTES[item.id];
@@ -51,8 +53,10 @@ export function WorkspaceNav({ active, collapsed = false, showAdmin = false, onN
           );
         })}
       </ul>
+      </div>
       {!collapsed && (
         <div className="workspace-nav-note">
+          <span className="workspace-nav-orbit" aria-hidden="true"><Satellite size={23} strokeWidth={1.5} /></span>
           <strong>{t.sidebar.monitoring}</strong>
           <span>{t.sidebar.monitoringDesc}</span>
         </div>

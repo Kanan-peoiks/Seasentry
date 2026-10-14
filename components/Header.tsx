@@ -2,7 +2,8 @@
 
 import { useSyncExternalStore } from "react";
 import Link from "next/link";
-import { FlaskConical, LogOut, Menu, Waves, X } from "lucide-react";
+import { FlaskConical, LogOut, Menu, X } from "lucide-react";
+import Brand from "@/components/Brand";
 import { useIncidentStore } from "@/lib/incident-store";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/ui/LanguageToggle";
@@ -65,9 +66,8 @@ export default function Header({ onLogout, onMenuClick, menuExpanded, signingOut
             <Menu size={19} aria-hidden="true" />
           </button>
         )}
-        <Link href="/dashboard" className="workspace-brand">
-          <Waves size={26} strokeWidth={1.6} aria-hidden="true" />
-          <span className="workspace-brand-copy"><strong translate="no">SeaSentry</strong><span>{t.header.tagline}</span></span>
+        <Link href="/dashboard" className="workspace-brand" aria-label="SeaSentry">
+          <Brand tagline={t.header.tagline} />
         </Link>
       </div>
 

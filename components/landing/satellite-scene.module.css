@@ -1,0 +1,31 @@
+.scene { position: relative; min-width: 0; width: 115%; margin-left: -9%; align-self: center; color: #FBF9F0; }
+.sceneSource { position: absolute; z-index: 2; top: 5%; right: 8%; display: inline-flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid #365577; border-radius: 5px; background: #03234D99; color: #B6D3E4; font-size: 11px; }
+.sceneSource svg { color: #00B8D9; }
+.orbitalScene { width: 100%; height: auto; display: block; overflow: visible; }
+.stars { opacity: .65; }
+.satellitePass { transform-origin: 440px 426px; animation: orbitalPass 14s ease-in-out infinite; }
+.satellite { filter: drop-shadow(0 8px 12px #00152B80); }
+.scanBeam { animation: scanningBeam 14s ease-in-out infinite; opacity: 0; }
+.scanFootprint { animation: scanningFootprint 14s ease-in-out infinite; opacity: .2; }
+.targetRings { transform-origin: 431px 383px; animation: signalRings 14s ease-out infinite; opacity: .25; }
+.observationNote { position: absolute; bottom: 15%; right: 6%; display: flex; align-items: center; gap: 10px; color: #A9CBDC; font-size: 11px; }
+.observationNote > span:first-child { display: inline-flex; align-items: center; gap: 7px; }
+.observationNote svg { color: #00C5C8; }
+.observationLine { width: 30px; height: 1px; background: #00C5C8; opacity: .55; }
+.sceneFooter { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 9% 0 15%; margin-top: -13px; position: relative; }
+.sceneFooter > span { color: #89ABC7; font-size: 10px; }
+.sceneFooter > div { display: flex; align-items: center; gap: 6px; }
+.sceneFooter button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #3B5D7E; background: #03234D; color: #B6D3E4; border-radius: 5px; cursor: pointer; }
+.sceneFooter button:hover { color: #00C5C8; border-color: #00C5C8; background: #10365A; }
+.sceneFooter button:focus-visible { outline: 3px solid #00C5C8; outline-offset: 4px; }
+.reducedNote { color: #89ABC7; font-size: 10px; }
+.scene[data-paused="true"] .satellitePass, .scene[data-paused="true"] .scanBeam, .scene[data-paused="true"] .scanFootprint, .scene[data-paused="true"] .targetRings { animation-play-state: paused; }
+@keyframes orbitalPass { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(9deg); } }
+@keyframes scanningBeam { 0%, 12%, 83%, 100% { opacity: 0; } 27%, 60% { opacity: 1; } }
+@keyframes scanningFootprint { 0%, 20%, 88%, 100% { opacity: .12; } 40%, 70% { opacity: 1; } }
+@keyframes signalRings { 0%, 34% { opacity: 0; transform: scale(.72); } 44% { opacity: .7; transform: scale(.8); } 67% { opacity: .25; transform: scale(1.4); } 80%, 100% { opacity: 0; transform: scale(1.7); } }
+@media (max-width: 1100px) { .scene { width: 117%; margin-left: -11%; }.sceneFooter { padding-left: 17%; }.sceneSource { font-size: 10px; right: 7%; top: 7%; }.observationNote { font-size: 10px; right: 4%; } }
+@media (max-width: 900px) { .scene { width: 125%; margin-left: -18%; }.sceneSource { right: 9%; top: 4%; }.observationNote { right: 9%; bottom: 14%; font-size: 9px; }.observationLine { display: none; }.sceneFooter { margin-top: -3px; padding-inline: 17% 10%; gap: 8px; }.sceneFooter > span { font-size: 9px; }.sceneFooter button { width: 30px; height: 30px; } }
+@media (max-width: 700px) { .scene { width: 100%; margin: 4px 0 18px; }.sceneSource { top: 4%; right: 5%; font-size: 10px; }.observationNote { right: 3%; bottom: 15%; font-size: 10px; }.sceneFooter { padding-inline: 9% 3%; margin-top: -10px; }.sceneFooter > span { font-size: 10px; }.sceneFooter button { width: 34px; height: 34px; } }
+@media (max-width: 480px) { .scene { width: calc(100% + 22px) !important; margin-left: -11px; margin-top: 15px; }.sceneSource { right: 5%; top: 1%; font-size: 9px; padding: 7px 9px; }.sceneSource svg { width: 12px; }.observationNote { right: 4%; bottom: 17%; font-size: 8px; }.observationNote svg { width: 12px; }.sceneFooter { margin-top: -1px; padding-inline: 10% 5%; }.sceneFooter > span { font-size: 9px; }.sceneFooter button { width: 32px; height: 32px; }.reducedNote { font-size: 9px; } }
+@media (prefers-reduced-motion: reduce) { .satellitePass, .scanBeam, .scanFootprint, .targetRings { animation: none !important; }.satellitePass { transform: rotate(0); }.scanBeam { opacity: .7; }.scanFootprint { opacity: .75; }.targetRings { opacity: .55; transform: scale(1); }.sceneFooter button { transition: none; } }

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
+import "./brand.css";
+import "./workspace.css";
 import { IncidentStoreProvider } from "@/lib/incident-store";
 import { NO_FLASH_THEME_SCRIPT } from "@/lib/theme";
 import { SessionProvider } from "@/lib/session";
@@ -29,11 +31,16 @@ export const metadata: Metadata = {
     "maritime intelligence",
     "SeaSentry",
   ],
+  icons: {
+    icon: "/brand/seasentry-logo.jpg",
+    apple: "/brand/seasentry-logo.jpg",
+  },
   openGraph: {
     title: "SeaSentry Dashboard",
     description:
       "Caspian Sea oil spill intelligence — satellite detection, AI analysis, and operator response.",
     type: "website",
+    images: [{ url: "/brand/seasentry-logo.jpg", width: 1924, height: 1924, alt: "SeaSentry" }],
   },
 };
 

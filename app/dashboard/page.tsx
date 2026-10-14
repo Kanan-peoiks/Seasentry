@@ -38,7 +38,7 @@ const RISK_ORDER = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
 const DAY_MS = 86_400_000;
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 /** Rail and docked details need at least this much width beside the map. */
-const WIDE_WORKSPACE_PX = 1100;
+const WIDE_WORKSPACE_PX = 1040;
 
 type Mode = "none" | "report" | "scan";
 type ScanState = { state: "idle" } | { state: "running" } | { state: "done"; tone: "info" | "error" | "success"; message: string };
@@ -251,15 +251,23 @@ function DashboardContent() {
   return (
     <div ref={rootRef} className={`dashboard${expanded ? " dashboard--expanded" : ""}${docked ? " dashboard--wide" : ""}${docked && selected ? " dashboard--detail" : ""}`}>
       {!expanded && (
+        <header className="dash-heading page-heading">
+          <div className="page-heading-copy">
+            <h1>{t.dashboard.title}</h1>
+            <p>{lang === "az" ? "Xəzərdəki hadisələri izləyin, peyk görüntülərini yoxlayın və qərar verin." : "Monitor Caspian incidents, inspect satellite imagery and coordinate decisions."}</p>
+          </div>
+          <div className="dash-heading-meta">
+            {lastUpdated && <span>{t.dashboard.updatedAt(formatWorkspaceTime(lastUpdated, lang))}</span>}
+            <Button onClick={() => void reloadIncidents()} busy={refreshing} aria-label={t.common.refresh}><RefreshCw size={16} aria-hidden="true" />{t.common.refresh}</Button>
+          </div>
+        </header>
+      )}
+      {!expanded && (
         <section className="dash-kpis" aria-label={t.dashboard.title}>
           <div className="dash-kpi"><span className="dash-kpi-label"><AlertTriangle size={15} aria-hidden="true" />{t.dashboard.kpiOpen}</span><strong>{loading ? "—" : stats.active}</strong></div>
           <div className="dash-kpi dash-kpi--high"><span className="dash-kpi-label"><ShieldAlert size={15} aria-hidden="true" />{t.dashboard.kpiHighRisk}</span><strong>{loading ? "—" : stats.highRisk}</strong></div>
           <div className="dash-kpi dash-kpi--med"><span className="dash-kpi-label"><Eye size={15} aria-hidden="true" />{t.dashboard.kpiAwaiting}</span><strong>{loading ? "—" : stats.underReview}</strong></div>
           <div className="dash-kpi"><span className="dash-kpi-label"><Droplets size={15} aria-hidden="true" />{t.dashboard.kpiCleaning}</span><strong>{loading ? "—" : incidents.filter((i) => i.status === "cleaning").length}</strong></div>
-          <div className="dash-kpi-meta">
-            {lastUpdated && <span>{t.dashboard.updatedAt(formatWorkspaceTime(lastUpdated, lang))}</span>}
-            <Button variant="ghost" onClick={() => void reloadIncidents()} busy={refreshing} aria-label={t.common.refresh}><RefreshCw size={16} aria-hidden="true" /><span className="hide-sm">{t.common.refresh}</span></Button>
-          </div>
         </section>
       )}
 
@@ -270,7 +278,7 @@ function DashboardContent() {
       <div className="dash-main">
         <section className="map-card" aria-labelledby="map-title">
           <div className="map-toolbar" role="toolbar" aria-label={t.dashboard.title}>
-            <h1 id="map-title" className="map-toolbar-title">{t.dashboard.title}</h1>
+            {expanded ? <h1 id="map-title" className="map-toolbar-title">{t.mapPanel.title}</h1> : <h2 id="map-title" className="map-toolbar-title">{t.mapPanel.title}</h2>}
             <div className="map-toolbar-group">
               {canAct && (
                 <>

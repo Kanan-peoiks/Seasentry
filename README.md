@@ -100,8 +100,8 @@ one workspace.
   (`detectionSource: "Manual report"`) — useful standalone today, and a
   stand-in for the ML pipeline until it's wired up.
 - **Incidents workspace** — searchable/filterable table, a detail panel
-  (side-panel or full-page, depending on context) with satellite imagery
-  placeholders, AI confidence gauges, drift/projection charts, source
+  (side-panel or full-page, depending on context) with the scan's SAR tile and
+  detector overlay compared on a draggable divider, AI confidence gauges, drift/projection charts, source
   attribution, and the full human-in-the-loop decision UI.
 - **Spill source back-calculation** — using live wind data and elapsed time
   since detection, the platform estimates the probable upwind rupture point,
@@ -371,11 +371,13 @@ step; it deploys straight from the first repo.
 - **Vessels, risk zones, and the activity feed** are deterministic mock data
   (`lib/mock-data.ts`) — no live AIS feed is integrated. Flagged as
   out-of-scope for the current backend unless a specific need comes up.
-- **Satellite imagery in the detail panel** still shows a placeholder
-  SAR/AI-overlay box (`ImagePlaceholder` in `IncidentDetailsPanel.tsx`) —
-  the real tile fetch now exists (`app/satellite.py`, used by `POST
-  /detect`) but its output isn't rendered as an on-screen image anywhere
-  yet, only analyzed.
+- **Satellite imagery in the detail panel** only exists for incidents created
+  by `POST /detect`: the backend stores the Sentinel-1 tile and a copy with
+  the detected bounding box drawn on it. Manual reports and seeded incidents
+  have no imagery and say so.
+- **Landing-page detection numbers** (area, confidence) are illustrative and
+  labelled as such; the imagery behind them is real archive data that is not
+  from the Caspian.
 - **`POST /detect`'s confidence score is a classical CV heuristic, not a
   trained model** — real Sentinel-1 pixels, real threshold/blob analysis
   (`app/spill_detect.py`), but not machine-learned. See

@@ -104,3 +104,52 @@
 .heroChapter div p { text-shadow: 0 1px 12px rgb(3 35 77 / 80%); }
 @media (max-width: 700px) { .heroChapter div h1 { font-size: clamp(34px, 9.5vw, 46px); } .heroChapter div p { font-size: 14px; } }
 @media (max-width: 700px) { .detection dl > div:nth-child(3), .detection dl > div:nth-child(4), .detection dl > div:nth-child(5) { display: none; } .detection { padding: 12px 14px 2px; } .detection dl > div { padding: 8px 0; } .shade { background: linear-gradient(0deg, rgb(3 35 77 / 96%) 0%, rgb(3 35 77 / 86%) 55%, rgb(3 35 77 / 0%) 85%); } }
+
+/* ---- real imagery layers ---------------------------------------------- */
+.stage { --sh: calc(100svh - var(--hdr)); }
+.photos { position: absolute; inset: 0; pointer-events: none; }
+.layer { position: absolute; inset: 0; overflow: hidden; opacity: 0; visibility: hidden; background: #03234D; }
+.cover { position: absolute; left: 50%; top: 50%; width: max(100%, calc(var(--sh) * var(--ar))); aspect-ratio: var(--ar); will-change: transform; }
+.cover img { object-fit: cover; }
+.overlay { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.sar .cover img { filter: contrast(1.12) brightness(.92); }
+
+/* radar scan: unscanned water stays dim until the line has passed */
+.scan { position: absolute; inset: 0; opacity: 0; --scan: 0%; }
+.scan::before { content: ""; position: absolute; left: 0; right: 0; top: var(--scan); bottom: 0; background: rgb(3 35 77 / 58%); }
+.scan::after { content: ""; position: absolute; left: 0; right: 0; top: calc(var(--scan) - 140px); height: 140px; background: linear-gradient(to bottom, rgb(0 197 200 / 0%), rgb(0 197 200 / 22%)); }
+.scan > i { position: absolute; left: 0; right: 0; top: var(--scan); height: 2px; background: #7FF0F0; box-shadow: 0 0 18px 2px rgb(0 230 230 / 55%); }
+
+.mask { fill: #00C5C8; fill-opacity: 0; stroke: #00E6E6; stroke-width: 4; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 0 6px rgb(0 230 230 / 60%)); }
+.tags { opacity: 0; }
+.tags rect { fill: rgb(3 35 77 / 92%); stroke: #00C5C8; stroke-width: 1.5; }
+.tags text, .analysisBox text { fill: #BFF3F7; font: 600 20px var(--font-ui), system-ui, sans-serif; }
+.analysisArea, .analysisHeat, .analysisBox { opacity: 0; transition: opacity .6s ease; }
+.analysisBox path { fill: none; stroke: #E4EFF4; stroke-width: 4; }
+.stage[data-step="2"] .analysisArea, .stage[data-step="3"] .analysisArea, .stage[data-step="4"] .analysisArea, .stage[data-step="5"] .analysisArea { opacity: 1; }
+.stage[data-step="3"] .analysisHeat, .stage[data-step="4"] .analysisHeat, .stage[data-step="5"] .analysisHeat { opacity: 1; }
+.stage[data-step="4"] .analysisBox, .stage[data-step="5"] .analysisBox { opacity: 1; }
+
+.photoTags circle { fill: #00C5C8; stroke: #03234D; stroke-width: 3; }
+.photoTags path { stroke: #FBF9F0; stroke-width: 2.5; }
+.photoTags text { fill: #FBF9F0; font: 600 22px var(--font-ui), system-ui, sans-serif; paint-order: stroke; stroke: rgb(3 35 77 / 85%); stroke-width: 8px; }
+
+.compareTop { position: absolute; inset: 0; }
+.divider { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; margin-left: -1px; background: #FBF9F0; box-shadow: 0 0 14px rgb(0 0 0 / 50%); opacity: 0; }
+.divider span { position: absolute; top: 50%; padding: 5px 9px; border-radius: 4px; background: #03234D; color: #FBF9F0; font-size: 12px; white-space: nowrap; transform: translateY(-50%); }
+.divider span:first-child { right: 10px; background: #00C5C8; color: #03234D; font-weight: 600; }
+.divider span:last-child { left: 10px; }
+
+.credit { position: absolute; left: 48px; bottom: 14px; z-index: 3; max-width: calc(100% - 140px); margin: 0; color: #94AFC9; font-size: 11px; text-shadow: 0 1px 6px rgb(3 35 77 / 90%); }
+.panelNote { margin: 10px 0 8px; color: #94AFC9; font-size: 11px; }
+
+/* headings rise in word by word */
+.word { display: inline-block; opacity: 0; transform: translateY(.55em); transition: opacity .45s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+.chapter[data-active="true"] .word { opacity: 1; transform: none; transition-delay: calc(.18s + var(--i) * 55ms); }
+
+@media (max-width: 700px) {
+  .credit { left: 20px; right: 20px; bottom: auto; top: 44px; max-width: none; font-size: 10px; }
+  .tags text, .analysisBox text { font-size: 30px; }
+  .photoTags text, .divider span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .word { transition: none; } }

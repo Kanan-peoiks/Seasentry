@@ -143,3 +143,5 @@
 .launchNav:hover:not(:disabled) { background: #58E0DF; }
 .launchNav:disabled { cursor: wait; opacity: .65; }
 @media (max-width: 900px) { .launchNav { display: none; } }
+/* The wordmark sits on navy here: use the brand turquoise so it keeps AA contrast. */
+.header .brandLink { color: #00C5C8; }

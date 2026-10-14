@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, ArrowRight, Crosshair, Droplets, Eye, Layers, LocateFixed, MapPin, Maximize2, Minimize2, Minus, Plus, RefreshCw, RotateCcw, Satellite, ShieldAlert, X } from "lucide-react";
@@ -22,6 +22,7 @@ import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
 import { formatWorkspaceTime, setWorkspaceQuery } from "@/lib/workspace-url";
 import { needsDecision } from "@/lib/incident-metrics";
+import { getStoredBasemap, setStoredBasemap, subscribeBasemap } from "@/lib/basemap";
 import type { Incident } from "@/lib/types";
 
 export default function DashboardPage() {
@@ -201,7 +202,7 @@ function DashboardContent() {
   const selectedId = params.get("incident");
   const selected = selectedId ? getIncidentById(selectedId) ?? null : null;
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_MAP_LAYERS);
-  const [basemap, setBasemap] = useState<Basemap>("map");
+  const basemap = useSyncExternalStore<Basemap>(subscribeBasemap, getStoredBasemap, () => "map");
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<Mode>("none");
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -310,7 +311,7 @@ function DashboardContent() {
                   </Button>
                 </>
               )}
-              <LayerMenu layers={layers} onChange={setLayers} basemap={basemap} onBasemapChange={setBasemap} />
+              <LayerMenu layers={layers} onChange={setLayers} basemap={basemap} onBasemapChange={setStoredBasemap} />
             </div>
             <div className="map-toolbar-group map-toolbar-view" role="group" aria-label={t.mapPanel.resetView}>
               <button type="button" className="ui-icon-button" onClick={() => mapRef.current?.zoomIn()} aria-label={t.mapPanel.zoomIn} title={t.mapPanel.zoomIn}><Plus size={17} aria-hidden="true" /></button>

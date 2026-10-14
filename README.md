@@ -267,6 +267,19 @@ uvicorn app.main:app --reload
 
 API docs (Swagger UI): `http://localhost:8000/docs`.
 
+No Python on the machine? [uv](https://docs.astral.sh/uv/) can provision
+one into the project without admin rights:
+
+```bash
+cd backend
+uv venv --python 3.12 .venv
+uv pip install --python .venv/Scripts/python.exe -r requirements.txt   # Windows path
+```
+
+`python -m app.seed` also creates local operator and admin logins and prints
+them. Without a running backend every sign-in, including guest access, fails
+with "Backend not configured".
+
 ### Frontend
 
 ```bash

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, ArrowRight, Crosshair, Droplets, Eye, Layers, LocateFixed, MapPin, Maximize2, Minimize2, Minus, Plus, RefreshCw, RotateCcw, Satellite, ShieldAlert, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import MapPanel, { DEFAULT_MAP_LAYERS, type MapHandle, type MapLayerId, type MapLayers } from "@/components/MapPanel";
+import MapPanel, { DEFAULT_MAP_LAYERS, modisDate, type Basemap, type MapHandle, type MapLayerId, type MapLayers } from "@/components/MapPanel";
 import SeaWeatherWidget from "@/components/SeaWeatherWidget";
 import IncidentDetailsPanel from "@/components/incidents/IncidentDetailsPanel";
 import ManualIncidentForm from "@/components/incidents/ManualIncidentForm";
@@ -82,7 +82,9 @@ function CoordinateForm({ onSubmit }: { onSubmit: (lat: number, lng: number) => 
   );
 }
 
-function LayerMenu({ layers, onChange }: { layers: MapLayers; onChange: (next: MapLayers) => void }) {
+type LayerMenuProps = { layers: MapLayers; onChange: (next: MapLayers) => void; basemap: Basemap; onBasemapChange: (next: Basemap) => void };
+
+function LayerMenu({ layers, onChange, basemap, onBasemapChange }: LayerMenuProps) {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -105,12 +107,29 @@ function LayerMenu({ layers, onChange }: { layers: MapLayers; onChange: (next: M
     ["zones", t.mapPanel.layerZones],
     ["drift", t.mapPanel.layerDrift, t.mapPanel.layerDriftHint],
   ];
+  const basemaps: [Basemap, string][] = [
+    ["map", t.mapPanel.basemapMap],
+    ["satellite", t.mapPanel.basemapSatellite],
+    ["modis", t.mapPanel.basemapModis],
+  ];
   return (
     <div className="layer-menu" ref={wrapRef}>
       <Button aria-expanded={open} aria-controls="map-layer-menu" onClick={() => setOpen((v) => !v)}><Layers size={16} aria-hidden="true" />{t.mapPanel.layers}</Button>
       {open && (
         <fieldset id="map-layer-menu" className="layer-menu-panel">
           <legend className="sr-only">{t.mapPanel.layers}</legend>
+          <div className="basemap-switch" role="radiogroup" aria-label={t.mapPanel.basemap}>
+            <strong>{t.mapPanel.basemap}</strong>
+            <div>
+              {basemaps.map(([id, label]) => (
+                <label key={id} className="basemap-option">
+                  <input type="radio" name="basemap" value={id} checked={basemap === id} onChange={() => onBasemapChange(id)} />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+            {basemap !== "map" && <small>{basemap === "satellite" ? t.mapPanel.basemapSatelliteHint : t.mapPanel.basemapModisHint(modisDate())}</small>}
+          </div>
           {items.map(([id, label, hint]) => (
             <label key={id} className="layer-option">
               <input type="checkbox" checked={layers[id]} onChange={(e) => onChange({ ...layers, [id]: e.target.checked })} />
@@ -182,6 +201,7 @@ function DashboardContent() {
   const selectedId = params.get("incident");
   const selected = selectedId ? getIncidentById(selectedId) ?? null : null;
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_MAP_LAYERS);
+  const [basemap, setBasemap] = useState<Basemap>("map");
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<Mode>("none");
   const [pendingCoords, setPendingCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -290,7 +310,7 @@ function DashboardContent() {
                   </Button>
                 </>
               )}
-              <LayerMenu layers={layers} onChange={setLayers} />
+              <LayerMenu layers={layers} onChange={setLayers} basemap={basemap} onBasemapChange={setBasemap} />
             </div>
             <div className="map-toolbar-group map-toolbar-view" role="group" aria-label={t.mapPanel.resetView}>
               <button type="button" className="ui-icon-button" onClick={() => mapRef.current?.zoomIn()} aria-label={t.mapPanel.zoomIn} title={t.mapPanel.zoomIn}><Plus size={17} aria-hidden="true" /></button>
@@ -330,6 +350,7 @@ function DashboardContent() {
               vessels={mapVessels}
               riskZones={riskZones}
               layers={layers}
+              basemap={basemap}
               selectedId={selected?.id ?? null}
               liveIncidentId={hasLiveIncident ? LIVE_INCIDENT_ID : null}
               sourceEstimates={sourceEstimates}

@@ -23,6 +23,28 @@ import { formatWorkspaceTime } from "@/lib/workspace-url";
 
 /** The two closest other incidents by real distance — useful context when
  * several reports cluster along the same corridor. */
+type SarCompareProps = { original: string; overlay: string; originalLabel: string; overlayLabel: string; originalAlt: string; overlayAlt: string; label: string; hint: string };
+
+/** Original SAR tile and the detector's overlay of the same tile, compared with a draggable divider. */
+function SarCompare({ original, overlay, originalLabel, overlayLabel, originalAlt, overlayAlt, label, hint }: SarCompareProps) {
+  const [position, setPosition] = useState(50);
+  return (
+    <figure className="sar-compare">
+      <div className="sar-compare-frame" style={{ ["--pos" as string]: `${position}%` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery */}
+        <img src={`data:image/png;base64,${original}`} alt={originalAlt} />
+        {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery */}
+        <img className="sar-compare-top" src={`data:image/png;base64,${overlay}`} alt={overlayAlt} />
+        <span className="sar-compare-line" aria-hidden="true"><i /></span>
+        <span className="sar-compare-tag sar-compare-tag--start" aria-hidden="true">{originalLabel}</span>
+        <span className="sar-compare-tag sar-compare-tag--end" aria-hidden="true">{overlayLabel}</span>
+        <input type="range" min={0} max={100} step={1} value={position} onChange={(e) => setPosition(Number(e.target.value))} aria-label={label} aria-valuetext={`${position}% ${originalLabel}`} />
+      </div>
+      <figcaption>{hint}</figcaption>
+    </figure>
+  );
+}
+
 function findSimilarIncidents(incident: Incident, all: Incident[]) {
   return all
     .filter((i) => i.id !== incident.id)
@@ -182,7 +204,18 @@ export default function IncidentDetailsPanel({ incident, onClose, expanded, cont
 
         <section className="detail-section" aria-labelledby={`evidence-${live.id}`}>
           <h3 id={`evidence-${live.id}`} className="detail-title"><Satellite size={16} aria-hidden="true" />{d.evidence}</h3>
-          {live.sarImageBase64 ? (
+          {live.sarImageBase64 && live.sarOverlayBase64 ? (
+            <SarCompare
+              original={live.sarImageBase64}
+              overlay={live.sarOverlayBase64}
+              originalLabel={d.originalSar}
+              overlayLabel={d.aiOverlay}
+              originalAlt={d.originalSarAlt(live.displayId)}
+              overlayAlt={d.overlayAlt(live.displayId)}
+              label={d.compareSar}
+              hint={d.compareHint}
+            />
+          ) : live.sarImageBase64 ? (
             <div className="evidence-grid">
               <figure>
                 {/* eslint-disable-next-line @next/next/no-img-element -- inline base64 scan imagery */}

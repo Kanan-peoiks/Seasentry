@@ -13,6 +13,33 @@ export type MapLayerId = "active" | "history" | "vessels" | "zones" | "drift";
 export type MapLayers = Record<MapLayerId, boolean>;
 export const DEFAULT_MAP_LAYERS: MapLayers = { active: true, history: false, vessels: true, zones: true, drift: false };
 
+export type Basemap = "map" | "satellite" | "modis";
+
+/** Most recent complete MODIS day: yesterday in UTC (today is still being acquired). */
+export function modisDate(now = Date.now()) {
+  return new Date(now - 86_400_000).toISOString().slice(0, 10);
+}
+
+function basemapSpec(basemap: Basemap): { url: string; options: L.TileLayerOptions & { time?: string } } {
+  if (basemap === "satellite") {
+    return {
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      options: { maxZoom: 19, maxNativeZoom: 18, attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics" },
+    };
+  }
+  if (basemap === "modis") {
+    const time = modisDate();
+    return {
+      url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/{time}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg",
+      options: { time, maxZoom: 19, maxNativeZoom: 9, attribution: `NASA EOSDIS GIBS · Terra MODIS ${time}` },
+    };
+  }
+  return {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    options: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' },
+  };
+}
+
 export type MapHandle = {
   zoomIn: () => void;
   zoomOut: () => void;
@@ -28,6 +55,8 @@ type Props = {
   vessels: Vessel[];
   riskZones: RiskZone[];
   layers: MapLayers;
+  /** Background tiles: street map, satellite mosaic or the latest daily MODIS pass. */
+  basemap?: Basemap;
   selectedId?: string | null;
   liveIncidentId?: string | null;
   /** Upwind source estimates keyed by incident id (drift layer only). */
@@ -83,7 +112,7 @@ function incidentTooltip(incident: Incident, t: Translations) {
 const signature = (incident: Incident, selected: boolean, live: boolean, lang: string) =>
   [incident.lat, incident.lng, incident.risk, incident.status, incident.areaM2, incident.title, selected, live, lang].join("|");
 
-export default function MapPanel({ incidents, vessels, riskZones, layers, selectedId, liveIncidentId, sourceEstimates, onIncidentSelect, placementMode = false, placementHint, onMapClick, onPlacementCancel, label, ref }: Props) {
+export default function MapPanel({ incidents, vessels, riskZones, layers, basemap = "map", selectedId, liveIncidentId, sourceEstimates, onIncidentSelect, placementMode = false, placementHint, onMapClick, onPlacementCancel, label, ref }: Props) {
   const { t, lang } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<typeof L | null>(null);
@@ -122,16 +151,6 @@ export default function MapPanel({ incidents, vessels, riskZones, layers, select
       map.attributionControl.setPrefix(false);
       mapRef.current = map;
 
-      let errors = 0;
-      const tiles = Leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      });
-      tiles.on("tileerror", () => { errors += 1; if (errors >= 4) setTileState("error"); });
-      tiles.on("load", () => { errors = 0; setTileState("ok"); });
-      tiles.addTo(map);
-      tilesRef.current = tiles;
-
       groupsRef.current = {
         zones: Leaflet.layerGroup(),
         history: Leaflet.layerGroup(),
@@ -157,6 +176,28 @@ export default function MapPanel({ incidents, vessels, riskZones, layers, select
       tilesRef.current = null;
     };
   }, []);
+
+  // Basemap tiles, swapped in place when the operator picks another background.
+  useEffect(() => {
+    const map = mapRef.current;
+    const Leaflet = leafletRef.current;
+    if (!ready || !map || !Leaflet) return;
+    const spec = basemapSpec(basemap);
+    let errors = 0;
+    const tiles = Leaflet.tileLayer(spec.url, spec.options);
+    tiles.on("tileerror", () => { errors += 1; if (errors >= 4) setTileState("error"); });
+    tiles.on("load", () => { errors = 0; setTileState("ok"); });
+    tiles.addTo(map);
+    tiles.bringToBack();
+    tilesRef.current = tiles;
+    return () => {
+      // On unmount the map is torn down first (map.remove() drops every layer); only swap on a live map.
+      // Remove before off(): Leaflet clears the layer's attribution from a one-off "remove" listener.
+      if (mapRef.current === map) map.removeLayer(tiles);
+      tiles.off();
+      if (tilesRef.current === tiles) tilesRef.current = null;
+    };
+  }, [ready, basemap]);
 
   // Layer visibility.
   useEffect(() => {

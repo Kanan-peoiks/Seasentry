@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowRight, Brain, Check, ChevronRight, Droplets, Eye, FileCheck2, LoaderCircle, Menu, Satellite, ShieldCheck, Waves, X } from "lucide-react";
@@ -11,16 +12,18 @@ import Brand from "@/components/Brand";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/ui/LanguageToggle";
 import SatelliteScene from "./SatelliteScene";
+import CinematicStory, { useCinematicEligible } from "./CinematicStory";
+import { SAR_H, SAR_W, SPILL_1, SPILL_2, toPath } from "./storyImagery";
 import styles from "./landing.module.css";
 
 const copy = {
   en: {
     territory: "A clearer view of the Caspian",
-    headline: ["From orbit.", "To action."],
-    subtitle: "Spot possible oil spills with satellite imagery. Bring the evidence, specialist review and response into one clear picture.",
+    headline: ["Protecting Our Oceans", "From Space"],
+    subtitle: "Advanced satellite intelligence for detecting, analyzing, and responding to marine oil spills.", heroPrimary: "Explore Platform", heroSecondary: "Discover How It Works", launch: "Launch Platform",
     explore: "Explore the workspace", workflow: "How it works", capabilities: "Capabilities", demoNote: "Guest access. No signup. Read-only demo.", humanNote: "Technology detects. People decide.",
     signal: "An observation becomes a decision.", signalBody: "SeaSentry connects what the satellite sees with what your team needs to do next.",
-    satelliteTitle: "See the evidence clearly", satelliteBody: "Inspect Sentinel-1 radar imagery, compare the original with the detection overlay, and understand the measured signals.", satelliteTag: "Satellite evidence", original: "Original imagery", overlay: "Detection overlay",
+    satelliteTitle: "See the evidence clearly", satelliteBody: "Inspect Sentinel-1 radar imagery, compare the original with the detection overlay, and understand the measured signals.", satelliteTag: "Satellite evidence", original: "Original imagery", overlay: "Detection overlay", radarCredit: "Real radar image: TerraSAR-X, Montara spill, Timor Sea, 2009 · © DLR, CC BY 3.0. Outline drawn for illustration.",
     humanTitle: "Keep the decision human", humanBody: "Confirm, reject or escalate a possible spill. A specialist reviews the evidence before an operational decision.", humanTag: "Specialist review",
     responseTitle: "Make the next step practical", responseBody: "Estimate cleanup requirements, follow an incident through resolution, and create a report your team can share.", responseTag: "Response planning",
     stagesTitle: "One signal. A clear path forward.", stagesBody: "A continuous workflow from first observation to a documented response.",
@@ -32,11 +35,11 @@ const copy = {
   },
   az: {
     territory: "Xəzərə daha aydın baxış",
-    headline: ["Orbitdən.", "Hərəkətə."],
-    subtitle: "Peyk təsvirləri ilə mümkün neft sızmalarını gör. Sübutları, mütəxəssis baxışını və cavab tədbirini vahid mənzərədə birləşdir.",
+    headline: ["Okeanlarımızı", "Kosmosdan qoruyuruq"],
+    subtitle: "Dəniz neft sızmalarını aşkarlamaq, təhlil etmək və onlara cavab vermək üçün qabaqcıl peyk intellekti.", heroPrimary: "Platformanı kəşf et", heroSecondary: "Necə işlədiyini kəşf et", launch: "Platformanı aç",
     explore: "İş sahəsini aç", workflow: "Necə işləyir", capabilities: "İmkanlar", demoNote: "Qonaq girişi. Qeydiyyatsız. Baxış rejimi.", humanNote: "Texnologiya aşkarlayır. İnsan qərar verir.",
     signal: "Müşahidə qərara çevrilir.", signalBody: "SeaSentry peykin gördüklərini komandanın növbəti addımı ilə əlaqələndirir.",
-    satelliteTitle: "Sübutları aydın gör", satelliteBody: "Sentinel-1 radar təsvirlərini yoxla, orijinalı aşkarlama qatı ilə müqayisə et və ölçülmüş göstəriciləri anla.", satelliteTag: "Peyk sübutları", original: "Orijinal təsvir", overlay: "Aşkarlama qatı",
+    satelliteTitle: "Sübutları aydın gör", satelliteBody: "Sentinel-1 radar təsvirlərini yoxla, orijinalı aşkarlama qatı ilə müqayisə et və ölçülmüş göstəriciləri anla.", satelliteTag: "Peyk sübutları", original: "Orijinal təsvir", overlay: "Aşkarlama qatı", radarCredit: "Real radar təsviri: TerraSAR-X, Montara sızması, Timor dənizi, 2009 · © DLR, CC BY 3.0. Kontur illüstrasiya üçün çəkilib.",
     humanTitle: "Qərarı insana saxla", humanBody: "Mümkün sızmanı təsdiq et, rədd et və ya eskalasiya et. Əməliyyat qərarından əvvəl mütəxəssis sübutlara baxır.", humanTag: "Mütəxəssis baxışı",
     responseTitle: "Növbəti addımı planlaşdır", responseBody: "Təmizləmə tələblərini hesabla, hadisəni həllinə qədər izlə və komandanla paylaşmaq üçün hesabat yarat.", responseTag: "Cavab tədbiri",
     stagesTitle: "Bir siqnal. Aydın növbəti addım.", stagesBody: "İlk müşahidədən sənədləşdirilmiş cavab tədbirinə qədər davamlı iş axını.",
@@ -110,7 +113,23 @@ export default function LandingPage() {
     setBusy(false);
   };
 
-  const demoButton = <button type="button" className={styles.primary} onClick={openDemo} disabled={busy} aria-busy={busy} aria-describedby={error ? "landing-demo-error" : undefined}>{busy ? <LoaderCircle className="spinner" size={18} aria-hidden="true" /> : null}<span>{busy ? c.loading : t.landing.continueAsGuest}</span><ArrowRight size={18} aria-hidden="true" /></button>;
+  const story = useCinematicEligible();
+  const demoButton = (label: string) => <button type="button" className={styles.primary} onClick={openDemo} disabled={busy} aria-busy={busy} aria-describedby={error ? "landing-demo-error" : undefined}>{busy ? <LoaderCircle className="spinner" size={18} aria-hidden="true" /> : null}<span>{busy ? c.loading : label}</span><ArrowRight size={18} aria-hidden="true" /></button>;
+
+  const heroCopy = <div className={styles.heroCopy}>
+    <p className={styles.territory}><span />{c.territory}</p>
+    <h1>{c.headline[0]}<br />{c.headline[1]}</h1>
+    <p className={styles.heroSub}>{c.subtitle}</p>
+    <div className={styles.heroActions}>{demoButton(c.heroPrimary)}<a className={styles.secondary} href="#workflow">{c.heroSecondary}<ArrowDown size={16} aria-hidden="true" /></a></div>
+    <p className={styles.demoNote}>{c.demoNote}</p>
+    {error && <p id="landing-demo-error" className={styles.demoError} role="alert">{error}</p>}
+    <div className={styles.humanPromise}><ShieldCheck size={20} strokeWidth={1.6} aria-hidden="true" /><span>{c.humanNote}</span></div>
+  </div>;
+  const signalStrip = <div className={styles.signalStrip}><span><Satellite size={18} aria-hidden="true" />Sentinel-1 SAR</span><span><Brain size={18} aria-hidden="true" />{lang === "az" ? "Sübut əsaslı təhlil" : "Evidence-led analysis"}</span><span><ShieldCheck size={18} aria-hidden="true" />{lang === "az" ? "İnsan nəzarəti" : "Human oversight"}</span><span><Droplets size={18} aria-hidden="true" />{c.responseTag}</span></div>;
+  const staticHero = <section className={styles.hero}>
+    <div className={styles.heroInner}>{heroCopy}<SatelliteScene lang={lang} /></div>
+    {signalStrip}
+  </section>;
 
   return <div className={styles.page}>
     <a href="#landing-content" className="skip-link">{c.skip}</a>
@@ -118,33 +137,31 @@ export default function LandingPage() {
       <div className={styles.navInner}>
         <Link href="/" className={styles.brandLink} aria-label="SeaSentry"><Brand variant="landing" /></Link>
         <nav className={styles.desktopNav} aria-label={c.nav}><a href="#capabilities">{c.capabilities}</a><a href="#workflow">{c.workflow}</a><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{t.nav.about}</a></nav>
-        <div className={styles.navActions}><LanguageToggle size={40} /><ThemeToggle size={40} /><Link className={styles.signIn} href="/login">{t.nav.login}<ArrowRight size={15} aria-hidden="true" /></Link><button ref={menuButtonRef} type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="landing-nav" aria-label={menu ? c.closeMenu : c.menu} onClick={() => setMenu(!menu)}>{menu ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}</button></div>
+        <div className={styles.navActions}><LanguageToggle size={40} /><ThemeToggle size={40} /><button type="button" className={styles.launchNav} onClick={openDemo} disabled={busy}>{c.launch}<ArrowRight size={15} aria-hidden="true" /></button><Link className={styles.signIn} href="/login">{t.nav.login}<ArrowRight size={15} aria-hidden="true" /></Link><button ref={menuButtonRef} type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="landing-nav" aria-label={menu ? c.closeMenu : c.menu} onClick={() => setMenu(!menu)}>{menu ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}</button></div>
       </div>
       {menu && <nav id="landing-nav" className={styles.mobileNav} aria-label={c.nav}><a href="#capabilities" onClick={() => setMenu(false)}>{c.capabilities}</a><a href="#workflow" onClick={() => setMenu(false)}>{c.workflow}</a><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{c.about}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav>}
     </header>
     <main id="landing-content">
-      <section className={styles.hero}>
-        <div className={styles.heroInner}>
-          <div className={styles.heroCopy}>
-            <p className={styles.territory}><span />{c.territory}</p>
-            <h1>{c.headline[0]}<br />{c.headline[1]}</h1>
-            <p className={styles.heroSub}>{c.subtitle}</p>
-            <div className={styles.heroActions}>{demoButton}<a className={styles.secondary} href="#workflow">{c.workflow}<ArrowDown size={16} aria-hidden="true" /></a></div>
-            <p className={styles.demoNote}>{c.demoNote}</p>
-            {error && <p id="landing-demo-error" className={styles.demoError} role="alert">{error}</p>}
-            <div className={styles.humanPromise}><ShieldCheck size={20} strokeWidth={1.6} aria-hidden="true" /><span>{c.humanNote}</span></div>
-          </div>
-          <SatelliteScene lang={lang} />
-        </div>
-        <div className={styles.signalStrip}><span><Satellite size={18} aria-hidden="true" />Sentinel-1 SAR</span><span><Brain size={18} aria-hidden="true" />{lang === "az" ? "Sübut əsaslı təhlil" : "Evidence-led analysis"}</span><span><ShieldCheck size={18} aria-hidden="true" />{lang === "az" ? "İnsan nəzarəti" : "Human oversight"}</span><span><Droplets size={18} aria-hidden="true" />{c.responseTag}</span></div>
-      </section>
+      {story ? <>
+        <CinematicStory lang={lang} hero={heroCopy} fallback={staticHero} onLaunch={openDemo} busy={busy} error={error} loadingLabel={c.loading} />
+        <div className={styles.hero}>{signalStrip}</div>
+      </> : staticHero}
 
       <section id="capabilities" className={styles.section}>
         <div className={styles.sectionHeading}><h2>{c.signal}</h2><p>{c.signalBody}</p></div>
         <div className={styles.features}>
           <article className={styles.evidenceFeature}>
             <div className={styles.featureTag}><Satellite size={18} aria-hidden="true" />{c.satelliteTag}</div>
-            <div className={styles.evidenceVisual} aria-hidden="true"><div className={styles.radarImage}><span className={styles.radarCoast} /><i /><span className={styles.imageCaption}>{c.original}</span></div><div className={`${styles.radarImage} ${styles.radarOverlay}`}><span className={styles.radarCoast} /><i /><span className={styles.detectionOutline} /><span className={styles.imageCaption}>{c.overlay}</span></div><div className={styles.compareIcon}><ArrowRight size={18} /></div></div>
+            <div className={styles.evidenceVisual} aria-hidden="true">
+              <div className={styles.radarImage}><Image src="/story/montara-sar.webp" alt="" fill sizes="(max-width: 700px) 50vw, 340px" className={styles.radarPhoto} /><span className={styles.imageCaption}>{c.original}</span></div>
+              <div className={styles.radarImage}>
+                <Image src="/story/montara-sar.webp" alt="" fill sizes="(max-width: 700px) 50vw, 340px" className={styles.radarPhoto} />
+                <svg className={styles.radarMask} viewBox={`0 0 ${SAR_W} ${SAR_H}`} preserveAspectRatio="xMidYMid slice"><path d={toPath(SPILL_1)} /><path d={toPath(SPILL_2)} /></svg>
+                <span className={styles.imageCaption}>{c.overlay}</span>
+              </div>
+              <div className={styles.compareIcon}><ArrowRight size={18} /></div>
+            </div>
+            <p className={styles.radarCredit}>{c.radarCredit}</p>
             <h3>{c.satelliteTitle}</h3><p>{c.satelliteBody}</p>
           </article>
           <div className={styles.decisionFeatures}>
@@ -164,7 +181,7 @@ export default function LandingPage() {
         <WorkspacePreview lang={lang} />
       </section>
 
-      <section className={styles.finalCta}><div className={styles.finalCtaInner}><div><p className={styles.finalPromise}><ShieldCheck size={17} aria-hidden="true" />{c.humanNote}</p><h2>{c.ready}</h2><p className={styles.finalBody}>{c.readyBody}</p></div><div className={styles.finalActions}>{demoButton}<Link className={styles.registerLink} href="/register">{t.auth.createAccount}<ArrowRight size={15} aria-hidden="true" /></Link></div></div></section>
+      <section className={styles.finalCta}><div className={styles.finalCtaInner}><div><p className={styles.finalPromise}><ShieldCheck size={17} aria-hidden="true" />{c.humanNote}</p><h2>{c.ready}</h2><p className={styles.finalBody}>{c.readyBody}</p></div><div className={styles.finalActions}>{demoButton(c.launch)}<Link className={styles.registerLink} href="/register">{t.auth.createAccount}<ArrowRight size={15} aria-hidden="true" /></Link></div></div></section>
     </main>
     <footer className={styles.footer}><div><Link href="/" className={styles.footerBrand} aria-label="SeaSentry"><Brand variant="default" /></Link><p>{c.footer}</p></div><nav aria-label={c.footerNav}><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{c.about}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav></footer>
   </div>;

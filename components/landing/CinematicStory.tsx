@@ -63,7 +63,9 @@ function hasWebGL() {
   if (webglSupport !== null) return webglSupport;
   try {
     const probe = document.createElement("canvas");
-    webglSupport = Boolean(probe.getContext("webgl2") || probe.getContext("webgl"));
+    const gl = probe.getContext("webgl2") || probe.getContext("webgl");
+    webglSupport = Boolean(gl);
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
   } catch { webglSupport = false; }
   return webglSupport;
 }

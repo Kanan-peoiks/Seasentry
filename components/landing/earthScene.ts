@@ -303,8 +303,8 @@ export function createEarthScene({ canvas, lowPower, onReady }: Options): EarthS
       const mesh = obj as THREE.Mesh;
       mesh.geometry?.dispose();
       const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else mat?.dispose();
+      const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
+      mats.forEach((m) => { (m as THREE.MeshStandardMaterial).map?.dispose(); m.dispose(); });
     });
     [dayMap, specMap, cloudMap].forEach((t) => t.dispose());
     renderer.dispose();

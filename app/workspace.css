@@ -305,3 +305,31 @@
   .vessel-detail dd { margin-bottom: 10px; }
   .analysis-measurements { grid-template-columns: 1fr; }
 }
+
+/* Base map choice: a compact segmented control at the top of the layer menu. */
+.basemap-switch { display: grid; gap: 8px; padding: 2px 4px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--glass-border); font-size: 12px; color: var(--text-secondary); }
+.basemap-switch strong { font-size: 12px; color: var(--text-primary); }
+.basemap-switch > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: 9px; background: var(--surface-muted); }
+.basemap-option { position: relative; }
+.basemap-option input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.basemap-option span { display: grid; place-items: center; min-height: 32px; padding: 0 6px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: center; }
+.basemap-option input:checked + span { background: var(--bg-elevated); color: var(--text-primary); box-shadow: 0 1px 3px rgb(8 24 38 / 14%); }
+.basemap-option input:focus-visible + span { outline: 3px solid var(--focus-ring); outline-offset: 1px; }
+.basemap-switch small { font-size: 11px; }
+
+/* SAR evidence: original tile on the left of the divider, detector overlay on the right. */
+.sar-compare { margin: 0; overflow: hidden; border: 1px solid var(--glass-border); border-radius: 12px; background: #061D3B; }
+.sar-compare-frame { position: relative; aspect-ratio: 1; overflow: hidden; touch-action: pan-y; }
+.sar-compare-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; user-select: none; -webkit-user-drag: none; }
+.sar-compare-top { clip-path: inset(0 0 0 var(--pos)); }
+.sar-compare-line { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px; background: #FBF9F0; box-shadow: 0 0 10px rgb(0 0 0 / 55%); pointer-events: none; }
+.sar-compare-line i { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; border: 2px solid #FBF9F0; border-radius: 50%; background: rgb(3 35 77 / 85%); transform: translate(-50%, -50%); }
+.sar-compare-line i::before, .sar-compare-line i::after { content: ""; position: absolute; top: 50%; width: 0; height: 0; border: 5px solid transparent; transform: translateY(-50%); }
+.sar-compare-line i::before { left: 2px; border-right-color: #FBF9F0; }
+.sar-compare-line i::after { right: 2px; border-left-color: #FBF9F0; }
+.sar-compare-tag { position: absolute; top: 10px; padding: 4px 8px; border-radius: 6px; background: rgb(3 35 77 / 88%); color: #E4EFF4; font-size: 11px; font-weight: 600; pointer-events: none; }
+.sar-compare-tag--start { left: 10px; }
+.sar-compare-tag--end { right: 10px; }
+.sar-compare-frame input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.sar-compare-frame:has(input:focus-visible) { outline: 3px solid var(--focus-ring); outline-offset: -3px; }
+.sar-compare figcaption { padding: 9px 12px; font-size: 12px; color: #D8E6EE; }

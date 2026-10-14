@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowRight, Brain, Check, ChevronRight, Droplets, Eye, FileCheck2, LoaderCircle, Menu, Satellite, ShieldCheck, Waves, X } from "lucide-react";
@@ -12,6 +13,7 @@ import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/ui/LanguageToggle";
 import SatelliteScene from "./SatelliteScene";
 import CinematicStory, { useCinematicEligible } from "./CinematicStory";
+import { SAR_H, SAR_W, SPILL_1, SPILL_2, toPath } from "./storyImagery";
 import styles from "./landing.module.css";
 
 const copy = {
@@ -21,7 +23,7 @@ const copy = {
     subtitle: "Advanced satellite intelligence for detecting, analyzing, and responding to marine oil spills.", heroPrimary: "Explore Platform", heroSecondary: "Discover How It Works", launch: "Launch Platform",
     explore: "Explore the workspace", workflow: "How it works", capabilities: "Capabilities", demoNote: "Guest access. No signup. Read-only demo.", humanNote: "Technology detects. People decide.",
     signal: "An observation becomes a decision.", signalBody: "SeaSentry connects what the satellite sees with what your team needs to do next.",
-    satelliteTitle: "See the evidence clearly", satelliteBody: "Inspect Sentinel-1 radar imagery, compare the original with the detection overlay, and understand the measured signals.", satelliteTag: "Satellite evidence", original: "Original imagery", overlay: "Detection overlay",
+    satelliteTitle: "See the evidence clearly", satelliteBody: "Inspect Sentinel-1 radar imagery, compare the original with the detection overlay, and understand the measured signals.", satelliteTag: "Satellite evidence", original: "Original imagery", overlay: "Detection overlay", radarCredit: "Real radar image: TerraSAR-X, Montara spill, Timor Sea, 2009 · © DLR, CC BY 3.0. Outline drawn for illustration.",
     humanTitle: "Keep the decision human", humanBody: "Confirm, reject or escalate a possible spill. A specialist reviews the evidence before an operational decision.", humanTag: "Specialist review",
     responseTitle: "Make the next step practical", responseBody: "Estimate cleanup requirements, follow an incident through resolution, and create a report your team can share.", responseTag: "Response planning",
     stagesTitle: "One signal. A clear path forward.", stagesBody: "A continuous workflow from first observation to a documented response.",
@@ -37,7 +39,7 @@ const copy = {
     subtitle: "Dəniz neft sızmalarını aşkarlamaq, təhlil etmək və onlara cavab vermək üçün qabaqcıl peyk intellekti.", heroPrimary: "Platformanı kəşf et", heroSecondary: "Necə işlədiyini kəşf et", launch: "Platformanı aç",
     explore: "İş sahəsini aç", workflow: "Necə işləyir", capabilities: "İmkanlar", demoNote: "Qonaq girişi. Qeydiyyatsız. Baxış rejimi.", humanNote: "Texnologiya aşkarlayır. İnsan qərar verir.",
     signal: "Müşahidə qərara çevrilir.", signalBody: "SeaSentry peykin gördüklərini komandanın növbəti addımı ilə əlaqələndirir.",
-    satelliteTitle: "Sübutları aydın gör", satelliteBody: "Sentinel-1 radar təsvirlərini yoxla, orijinalı aşkarlama qatı ilə müqayisə et və ölçülmüş göstəriciləri anla.", satelliteTag: "Peyk sübutları", original: "Orijinal təsvir", overlay: "Aşkarlama qatı",
+    satelliteTitle: "Sübutları aydın gör", satelliteBody: "Sentinel-1 radar təsvirlərini yoxla, orijinalı aşkarlama qatı ilə müqayisə et və ölçülmüş göstəriciləri anla.", satelliteTag: "Peyk sübutları", original: "Orijinal təsvir", overlay: "Aşkarlama qatı", radarCredit: "Real radar təsviri: TerraSAR-X, Montara sızması, Timor dənizi, 2009 · © DLR, CC BY 3.0. Kontur illüstrasiya üçün çəkilib.",
     humanTitle: "Qərarı insana saxla", humanBody: "Mümkün sızmanı təsdiq et, rədd et və ya eskalasiya et. Əməliyyat qərarından əvvəl mütəxəssis sübutlara baxır.", humanTag: "Mütəxəssis baxışı",
     responseTitle: "Növbəti addımı planlaşdır", responseBody: "Təmizləmə tələblərini hesabla, hadisəni həllinə qədər izlə və komandanla paylaşmaq üçün hesabat yarat.", responseTag: "Cavab tədbiri",
     stagesTitle: "Bir siqnal. Aydın növbəti addım.", stagesBody: "İlk müşahidədən sənədləşdirilmiş cavab tədbirinə qədər davamlı iş axını.",
@@ -150,7 +152,16 @@ export default function LandingPage() {
         <div className={styles.features}>
           <article className={styles.evidenceFeature}>
             <div className={styles.featureTag}><Satellite size={18} aria-hidden="true" />{c.satelliteTag}</div>
-            <div className={styles.evidenceVisual} aria-hidden="true"><div className={styles.radarImage}><span className={styles.radarCoast} /><i /><span className={styles.imageCaption}>{c.original}</span></div><div className={`${styles.radarImage} ${styles.radarOverlay}`}><span className={styles.radarCoast} /><i /><span className={styles.detectionOutline} /><span className={styles.imageCaption}>{c.overlay}</span></div><div className={styles.compareIcon}><ArrowRight size={18} /></div></div>
+            <div className={styles.evidenceVisual} aria-hidden="true">
+              <div className={styles.radarImage}><Image src="/story/montara-sar.webp" alt="" fill sizes="(max-width: 700px) 50vw, 340px" className={styles.radarPhoto} /><span className={styles.imageCaption}>{c.original}</span></div>
+              <div className={styles.radarImage}>
+                <Image src="/story/montara-sar.webp" alt="" fill sizes="(max-width: 700px) 50vw, 340px" className={styles.radarPhoto} />
+                <svg className={styles.radarMask} viewBox={`0 0 ${SAR_W} ${SAR_H}`} preserveAspectRatio="xMidYMid slice"><path d={toPath(SPILL_1)} /><path d={toPath(SPILL_2)} /></svg>
+                <span className={styles.imageCaption}>{c.overlay}</span>
+              </div>
+              <div className={styles.compareIcon}><ArrowRight size={18} /></div>
+            </div>
+            <p className={styles.radarCredit}>{c.radarCredit}</p>
             <h3>{c.satelliteTitle}</h3><p>{c.satelliteBody}</p>
           </article>
           <div className={styles.decisionFeatures}>

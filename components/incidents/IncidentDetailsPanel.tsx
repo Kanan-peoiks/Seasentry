@@ -38,7 +38,7 @@ function SarCompare({ original, overlay, originalLabel, overlayLabel, originalAl
         <span className="sar-compare-line" aria-hidden="true"><i /></span>
         <span className="sar-compare-tag sar-compare-tag--start" aria-hidden="true">{originalLabel}</span>
         <span className="sar-compare-tag sar-compare-tag--end" aria-hidden="true">{overlayLabel}</span>
-        <input type="range" min={0} max={100} step={1} value={position} onChange={(e) => setPosition(Number(e.target.value))} aria-label={label} aria-valuetext={`${position}% ${originalLabel}`} />
+        <input type="range" min={0} max={100} step={1} value={position} onChange={(e) => setPosition(Number(e.target.value))} aria-label={label} aria-valuetext={`${originalLabel} ${position}%, ${overlayLabel} ${100 - position}%`} />
       </div>
       <figcaption>{hint}</figcaption>
     </figure>

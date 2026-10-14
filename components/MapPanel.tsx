@@ -73,7 +73,8 @@ type Props = {
 
 const isClosed = (incident: Incident) => incident.status === "resolved" || incident.status === "rejected";
 
-// Fixed colours: the OpenStreetMap basemap is always light, whatever the app theme.
+// Fixed colours, independent of the app theme: they must read on the light street map
+// as well as on the darker satellite and MODIS basemaps (markers also get a white outline).
 const RISK_COLOR: Record<Incident["risk"], string> = { HIGH: "#C0392B", MEDIUM: "#B7791F", LOW: "#1F7A99" };
 const CLOSED_COLOR = "#6B7C88";
 

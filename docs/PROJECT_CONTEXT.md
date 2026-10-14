@@ -75,3 +75,21 @@ Hər ikisi rəsmi `skill-installer` helper-i ilə quraşdırılıb və SKILL.md 
 `app/`, `components/`, `lib/`, `backend/` altındakı bütün birinci tərəf mənbə faylları, testlər, konfiqurasiya və layihə sənədləri oxunub. Aktiv dashboard xəritə/weather/KPI/recent incidents/activity komponentlərindən istifadə edir; köhnə WidgetGrid və ona bağlı widget dəsti hazırkı ekranlardan çağırılmır.
 
 Bu işdə tətbiqin mənbə kodu dəyişdirilməyib. Quraşdırma xaricində əlavə olunan yeganə layihə faylı bu qeyddir. Lokal `node_modules` mövcud deyil; gələcək Next.js kod dəyişikliklərindən əvvəl asılılıqlar qurulmalı və AGENTS.md tələbinə uyğun `node_modules/next/dist/docs/` daxilində aidiyyəti təlimat oxunmalıdır.
+
+## Vəziyyət yeniləməsi — 15 oktyabr 2026
+
+Yuxarıdakı "Prioritet tapıntılar" siyahısı köhnə kod üzərində yazılıb; sətir nömrələri artıq uyğun gəlmir. Cari kodda yoxlanılıb və həll edilmiş hesab olunur:
+
+- `DetailPanel` artıq `Dialog` üzərindədir: Escape, fokus tələsi və fokusun geri qaytarılması var.
+- `FilterBar` axtarış və filtr sahələrinin hər birinin `<label htmlFor>` bağlantısı var.
+- Header-dəki "System Online" göstəricisi silinib.
+- `SeaWeatherWidget` çatışmayan ölçmələri `null` kimi saxlayır və "məlumat yoxdur" göstərir, sıfıra çevirmir.
+- `StatCard` rəng çalarını `color-mix` ilə alır; `+ "18"` yanaşması qalmayıb.
+- `lib/auth.ts` 5xx cavabını sessiyanın bitməsi deyil, şəbəkə/xidmət xətası kimi qəbul edir (smoke testi ilə örtülüb).
+- Shell `100dvh` istifadə edir; qlobal `:focus-visible` və reduced-motion qaydaları mövcuddur; `ClientPreferences` `<html lang>`-i seçilmiş dilə uyğunlaşdırır.
+- `ai-analysis` siyahısında kartlar klaviatura ilə açılan `Link`-dir; `ActivityFeed` komponenti silinib.
+- Köhnə landing (`landing-step`) yenidən yazılıb.
+
+Yoxlanılmayıb, açıq qalır: `backend/app/routers/incidents.py` AI accuracy tərifi, `backend/app/routers/detect.py` minimum blob sahəsi ilə HIGH risk həddinin əlaqəsi, hesabatlarda PDF-in yenidən yaradılması.
+
+Bu tarixdən sonra əlavə olunanlar: kinematik landing hekayəsi (real NASA/DLR/Copernicus təsvirləri, mənbələr `public/story/CREDITS.md`-də), xəritədə peyk və gündəlik MODIS fon xəritələri, hadisə panelində SAR orijinal/overlay müqayisə sürgüsü.

@@ -111,9 +111,11 @@ export function useCinematicEligible() {
   return useSyncExternalStore(subscribeEligibility, eligibleSnapshot, () => false);
 }
 
-/** Heading whose words rise in one after another when the chapter becomes active. */
+/** Heading whose words rise in one after another when the chapter becomes active.
+ * Screen readers get the sentence once; the per-word spans are visual only. */
 function Words({ text }: { text: string }) {
-  return <>{text.split(" ").map((w, i) => <span key={`${w}-${i}`} className={styles.word} style={{ ["--i" as string]: i }}>{w}</span>).flatMap((el, i) => (i ? [" ", el] : [el]))}</>;
+  const words = text.split(" ").map((w, i) => <span key={`${w}-${i}`} className={styles.word} style={{ ["--i" as string]: i }}>{w}</span>);
+  return <><span className="sr-only">{text}</span><span aria-hidden="true">{words.flatMap((el, i) => (i ? [" ", el] : [el]))}</span></>;
 }
 
 type LayerKey = "caspian" | "sar" | "sarInner" | "scan" | "response" | "responseInner" | "monitor" | "monitorTop" | "divider";

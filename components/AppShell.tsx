@@ -8,6 +8,7 @@ import Sidebar, { WorkspaceNav } from "@/components/Sidebar";
 import Dialog from "@/components/ui/Dialog";
 import Button from "@/components/ui/Button";
 import Notice from "@/components/ui/Notice";
+import Brand from "@/components/Brand";
 import type { NavId } from "@/lib/nav";
 import type { AuthUser } from "@/lib/auth";
 import { useSession } from "@/lib/session";
@@ -29,6 +30,7 @@ function SessionGate({ status, onRetry }: { status: "checking" | "unavailable"; 
   const checking = status === "checking";
   return (
     <div className="session-gate" role={checking ? "status" : "alert"} aria-busy={checking || undefined}>
+      <Brand />
       {checking ? <LoaderCircle size={28} className="spinner" aria-hidden="true" /> : <ServerCrash size={28} aria-hidden="true" />}
       <h1>{checking ? t.session.checkingTitle : t.session.unavailableTitle}</h1>
       <p>{checking ? t.session.checkingBody : t.session.unavailableBody}</p>

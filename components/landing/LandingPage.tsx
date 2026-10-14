@@ -1,78 +1,81 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { ArrowDown, ArrowRight, Brain, Check, ChevronRight, Droplets, Eye, LoaderCircle, Menu, Play, RotateCcw, Satellite, ShieldCheck, Waves, X } from "lucide-react";
+import { ArrowDown, ArrowRight, Brain, Check, ChevronRight, Droplets, Eye, FileCheck2, LoaderCircle, Menu, Satellite, ShieldCheck, Waves, X } from "lucide-react";
 import { loginAsDemo } from "@/lib/auth";
 import { useSession } from "@/lib/session";
 import { useLanguage } from "@/lib/useLanguage";
+import Brand from "@/components/Brand";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import LanguageToggle from "@/components/ui/LanguageToggle";
+import SatelliteScene from "./SatelliteScene";
 import styles from "./landing.module.css";
 
 const copy = {
   en: {
-    territory: "Built for the Caspian Sea", headline: ["See the Caspian.", "Act with clarity."], subtitle: "Satellite evidence. Human judgement. One workspace to investigate possible oil spills and plan the response.",
-    explore: "Explore the workspace", workflow: "How it works", capabilities: "Capabilities", demoNote: "Guest access · no signup · read-only demo", humanNote: "Technology detects. People decide.",
-    signal: "A signal is only the beginning.", signalBody: "Bring the evidence, the decision and the response into one clear operational picture.",
-    satelliteTitle: "Start with the evidence", satelliteBody: "Review Sentinel-1 radar imagery, compare the original and overlay, and see the detector’s measured signals.", satelliteTag: "Satellite imagery", humanTitle: "Keep the decision human", humanBody: "Confirm, reject or escalate a detection. Every operational action stays in the hands of a specialist.", humanTag: "Specialist review", responseTitle: "Turn a decision into a plan", responseBody: "Estimate cleanup requirements, follow the incident through resolution, and create a shareable report.", responseTag: "Response planning",
-    stagesTitle: "One signal. A clear path forward.", stagesBody: "From a satellite observation to a documented response, with human review at the centre.",
-    stages: [ ["Detect", "Scan a location or report an observation."], ["Analyze", "Inspect the imagery, signals and context."], ["Decide", "A specialist reviews the available evidence."], ["Respond", "Plan requirements and document resolution."] ],
-    workspaceTitle: "The whole picture, without the noise.", workspaceBody: "A map-first workspace keeps the coastline, review queue and local conditions close. Open an incident to go from overview to evidence.", preview: "Workspace preview", monitor: "Monitoring map", queue: "Review queue", review: "Human review required", event: "Possible surface anomaly", simulated: "Illustrative scan · not a live detection", replay: "Replay scan", scan: "SAR scan", detected: "Signal found", human: "Human review", pending: "Awaiting specialist", ready: "Your next view of the Caspian starts here.", readyBody: "Explore the demo workspace and follow an incident from first signal to human decision.", footer: "Caspian Sea oil-spill intelligence", about: "About SeaSentry", menu: "Open navigation", closeMenu: "Close navigation", loading: "Opening workspace…",
-    countries: ["AZERBAIJAN", "TURKMENISTAN", "KAZAKHSTAN", "IRAN", "RUSSIA"], baku: "Baku",
+    territory: "A clearer view of the Caspian",
+    headline: ["From orbit.", "To action."],
+    subtitle: "Spot possible oil spills with satellite imagery. Bring the evidence, specialist review and response into one clear picture.",
+    explore: "Explore the workspace", workflow: "How it works", capabilities: "Capabilities", demoNote: "Guest access. No signup. Read-only demo.", humanNote: "Technology detects. People decide.",
+    signal: "An observation becomes a decision.", signalBody: "SeaSentry connects what the satellite sees with what your team needs to do next.",
+    satelliteTitle: "See the evidence clearly", satelliteBody: "Inspect Sentinel-1 radar imagery, compare the original with the detection overlay, and understand the measured signals.", satelliteTag: "Satellite evidence", original: "Original imagery", overlay: "Detection overlay",
+    humanTitle: "Keep the decision human", humanBody: "Confirm, reject or escalate a possible spill. A specialist reviews the evidence before an operational decision.", humanTag: "Specialist review",
+    responseTitle: "Make the next step practical", responseBody: "Estimate cleanup requirements, follow an incident through resolution, and create a report your team can share.", responseTag: "Response planning",
+    stagesTitle: "One signal. A clear path forward.", stagesBody: "A continuous workflow from first observation to a documented response.",
+    stages: [["Detect", "Scan a location or report an observation."], ["Analyze", "Inspect the imagery, measured signals and context."], ["Decide", "A specialist reviews the available evidence."], ["Respond", "Plan requirements and document the outcome."]],
+    workspaceTitle: "The sea, the signals, the whole picture.", workspaceBody: "A map-first workspace puts the coastline, incident queue and local conditions together. Move from the regional overview to the evidence behind a single observation.",
+    preview: "Illustrative workspace preview", monitor: "Monitoring map", queue: "Review queue", review: "Specialist review required", event: "Possible surface anomaly", pending: "Awaiting specialist", context: "Local conditions", observation: "Observation details", source: "Sentinel-1 radar imagery", mapLabel: "Illustrative Caspian monitoring map with two observations near Baku and Sangachal",
+    ready: "A better view. A clearer response.", readyBody: "Open the demo workspace and follow an observation from first signal to a human decision.",
+    footer: "Caspian Sea oil-spill intelligence", about: "About SeaSentry", menu: "Open navigation", closeMenu: "Close navigation", loading: "Opening workspace…", baku: "Baku", sea: "Caspian Sea", sangachal: "Sangachal coast", corridor: "Baku corridor", skip: "Skip to content", nav: "Main navigation", footerNav: "Footer navigation",
   },
   az: {
-    territory: "Xəzər dənizi üçün qurulub", headline: ["Xəzəri gör.", "Aydın qərar ver."], subtitle: "Peyk sübutu. Mütəxəssis qərarı. Mümkün neft sızmalarını araşdırmaq və cavab tədbirini planlaşdırmaq üçün vahid iş sahəsi.",
-    explore: "İş sahəsini aç", workflow: "Necə işləyir", capabilities: "İmkanlar", demoNote: "Qonaq girişi · qeydiyyatsız · baxış rejimi", humanNote: "Texnologiya aşkarlayır. İnsan qərar verir.",
-    signal: "Siqnal yalnız başlanğıcdır.", signalBody: "Sübutları, qərarı və cavab tədbirini aydın əməliyyat görünüşündə birləşdir.",
-    satelliteTitle: "Sübutdan başla", satelliteBody: "Sentinel-1 radar təsvirini yoxla, orijinalı və overlay-i müqayisə et, detektorun ölçülmüş göstəricilərini gör.", satelliteTag: "Peyk təsvirləri", humanTitle: "Qərarı insana saxla", humanBody: "Aşkarlamanı təsdiq et, rədd et və ya eskalasiya et. Hər əməliyyat qərarı mütəxəssisin əlində qalır.", humanTag: "Mütəxəssis baxışı", responseTitle: "Qərarı plana çevir", responseBody: "Təmizləmə tələblərini hesabla, hadisəni həllinə qədər izlə və paylaşmaq üçün hesabat yarat.", responseTag: "Cavab tədbiri",
-    stagesTitle: "Bir siqnal. Aydın növbəti addım.", stagesBody: "Peyk müşahidəsindən sənədləşdirilmiş cavab tədbirinə — mərkəzdə insan qərarı ilə.",
-    stages: [ ["Aşkarlama", "Məkanı skan et və ya müşahidəni bildir."], ["Təhlil", "Təsvirə, göstəricilərə və şəraitə bax."], ["Qərar", "Mütəxəssis mövcud sübutları yoxlayır."], ["Cavab", "Tələbləri planlaşdır və nəticəni sənədləşdir."] ],
-    workspaceTitle: "Tam mənzərə. Lazımsız qarışıqlıq olmadan.", workspaceBody: "Xəritə əsaslı iş sahəsində sahil, baxış növbəsi və yerli şərait yan-yanadır. Ümumi görünüşdən sübutlara keçmək üçün hadisəni aç.", preview: "İş sahəsinin təsviri", monitor: "Monitorinq xəritəsi", queue: "Baxış növbəsi", review: "Mütəxəssis baxışı tələb olunur", event: "Mümkün səth anomaliyası", simulated: "Demo skanı · real aşkarlama deyil", replay: "Skanı yenidən göstər", scan: "SAR skanı", detected: "Siqnal tapıldı", human: "İnsan qərarı", pending: "Mütəxəssis gözlənilir", ready: "Xəzərə növbəti baxışın buradan başlayır.", readyBody: "Demo iş sahəsini aç və hadisəni ilk siqnaldan insan qərarına qədər izlə.", footer: "Xəzər dənizində neft sızması monitorinqi", about: "SeaSentry haqqında", menu: "Naviqasiyanı aç", closeMenu: "Naviqasiyanı bağla", loading: "İş sahəsi açılır…",
-    countries: ["AZƏRBAYCAN", "TÜRKMƏNİSTAN", "QAZAXISTAN", "İRAN", "RUSİYA"], baku: "Bakı",
+    territory: "Xəzərə daha aydın baxış",
+    headline: ["Orbitdən.", "Hərəkətə."],
+    subtitle: "Peyk təsvirləri ilə mümkün neft sızmalarını gör. Sübutları, mütəxəssis baxışını və cavab tədbirini vahid mənzərədə birləşdir.",
+    explore: "İş sahəsini aç", workflow: "Necə işləyir", capabilities: "İmkanlar", demoNote: "Qonaq girişi. Qeydiyyatsız. Baxış rejimi.", humanNote: "Texnologiya aşkarlayır. İnsan qərar verir.",
+    signal: "Müşahidə qərara çevrilir.", signalBody: "SeaSentry peykin gördüklərini komandanın növbəti addımı ilə əlaqələndirir.",
+    satelliteTitle: "Sübutları aydın gör", satelliteBody: "Sentinel-1 radar təsvirlərini yoxla, orijinalı aşkarlama qatı ilə müqayisə et və ölçülmüş göstəriciləri anla.", satelliteTag: "Peyk sübutları", original: "Orijinal təsvir", overlay: "Aşkarlama qatı",
+    humanTitle: "Qərarı insana saxla", humanBody: "Mümkün sızmanı təsdiq et, rədd et və ya eskalasiya et. Əməliyyat qərarından əvvəl mütəxəssis sübutlara baxır.", humanTag: "Mütəxəssis baxışı",
+    responseTitle: "Növbəti addımı planlaşdır", responseBody: "Təmizləmə tələblərini hesabla, hadisəni həllinə qədər izlə və komandanla paylaşmaq üçün hesabat yarat.", responseTag: "Cavab tədbiri",
+    stagesTitle: "Bir siqnal. Aydın növbəti addım.", stagesBody: "İlk müşahidədən sənədləşdirilmiş cavab tədbirinə qədər davamlı iş axını.",
+    stages: [["Aşkarlama", "Məkanı skan et və ya müşahidəni bildir."], ["Təhlil", "Təsvirə, ölçülmüş göstəricilərə və şəraitə bax."], ["Qərar", "Mütəxəssis mövcud sübutları yoxlayır."], ["Cavab", "Tələbləri planlaşdır və nəticəni sənədləşdir."]],
+    workspaceTitle: "Dəniz, siqnallar və tam mənzərə.", workspaceBody: "Xəritə əsaslı iş sahəsi sahili, hadisə növbəsini və yerli şəraiti birləşdirir. Regional görünüşdən tək bir müşahidənin arxasındakı sübutlara keç.",
+    preview: "İş sahəsinin illüstrativ görünüşü", monitor: "Monitorinq xəritəsi", queue: "Baxış növbəsi", review: "Mütəxəssis baxışı tələb olunur", event: "Mümkün səth anomaliyası", pending: "Mütəxəssis gözlənilir", context: "Yerli şərait", observation: "Müşahidə məlumatları", source: "Sentinel-1 radar təsvirləri", mapLabel: "Bakı və Səngəçal yaxınlığında iki müşahidə olan illüstrativ Xəzər monitorinq xəritəsi",
+    ready: "Daha aydın baxış. Dəqiq cavab.", readyBody: "Demo iş sahəsini aç və müşahidəni ilk siqnaldan insan qərarına qədər izlə.",
+    footer: "Xəzər dənizində neft sızması monitorinqi", about: "SeaSentry haqqında", menu: "Naviqasiyanı aç", closeMenu: "Naviqasiyanı bağla", loading: "İş sahəsi açılır…", baku: "Bakı", sea: "Xəzər dənizi", sangachal: "Səngəçal sahili", corridor: "Bakı dəhlizi", skip: "Məzmuna keç", nav: "Əsas naviqasiya", footerNav: "Alt naviqasiya",
   },
 };
 
-const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
-function subscribeReducedMotion(onChange: () => void) {
-  const media = window.matchMedia(REDUCED_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
-/** Same value on the server and during hydration; the user preference
- * applies right after, by making every transition instant. */
-function useReducedMotionSafe() {
-  return useSyncExternalStore(subscribeReducedMotion, () => window.matchMedia(REDUCED_QUERY).matches, () => false);
-}
-const INSTANT = { duration: 0 };
-
-function CaspianScene({ compact = false }: { compact?: boolean }) {
-  const { lang } = useLanguage();
+function WorkspacePreview({ lang }: { lang: "en" | "az" }) {
   const c = copy[lang];
-  const reduced = useReducedMotionSafe();
-  const [run, setRun] = useState(0);
-  const id = useId().replaceAll(":", "");
-  const sea = "M326 48 C352 35 379 47 385 70 L423 65 436 91 418 111 441 134 422 157 439 181 409 197 407 219 389 245 388 278 365 302 383 326 374 359 391 383 383 422 363 450 353 486 329 506 305 497 273 505 246 484 239 455 250 430 244 402 259 373 254 344 268 318 266 284 279 260 273 232 291 203 284 180 302 157 300 129 282 111 289 88 307 87 309 64 Z";
-  return <div className={`${styles.scene} ${compact ? styles.sceneCompact : ""}`}>
-    <div className={styles.sceneTop}><span><Satellite size={15} aria-hidden="true" /> Sentinel-1 SAR</span><span className={styles.sceneDemo}>{lang === "az" ? "Demo səhnəsi" : "Demo scene"}</span></div>
-    <svg viewBox="0 0 620 560" role="img" aria-label={c.simulated} className={styles.sceneMap}>
-      <defs><linearGradient id={`sea${id}`} x1="0" x2="1" y1="0" y2="1"><stop stopColor="#267f91" stopOpacity=".5" /><stop offset="1" stopColor="#122f49" /></linearGradient><pattern id={`grid${id}`} width="62" height="56" patternUnits="userSpaceOnUse"><path d="M62 0H0V56" fill="none" stroke="#8cb9ce" strokeOpacity=".1" strokeWidth=".8" /></pattern><clipPath id={`clip${id}`}><path d={sea} /></clipPath></defs>
-      <rect width="620" height="560" fill={`url(#grid${id})`} />
-      <g fill="none" stroke="#356074" strokeWidth="1" opacity=".38"><path d="M16 63Q189 123 253 79M-20 131Q148 186 220 146T256 84M-20 333Q76 294 170 324T253 311M420 261Q484 255 640 322M402 418Q493 369 640 426" /><path d="M-20 171Q113 216 218 166M-20 359Q82 333 169 353T247 335M418 292Q502 281 640 347M402 443Q503 395 640 457" /></g>
-      <path d={sea} fill={`url(#sea${id})`} stroke="#75c6c8" strokeOpacity=".8" strokeWidth="1.7" />
-      <g clipPath={`url(#clip${id})`}><path d="M217 155L443 227M219 220L445 292M217 285L443 357M217 350L443 422" stroke="#79c6bf" strokeOpacity=".13" strokeWidth="16" />
-        <motion.rect key={run} x="220" width="240" height="84" fill="#70d1c2" fillOpacity=".24" initial={{ y: -85, opacity: 0 }} animate={reduced ? { y: -85, opacity: 0 } : { y: [-85, 440], opacity: [0, .9, .9, 0] }} transition={{ duration: 2.7, delay: .4, ease: "easeInOut" }} />
-      </g>
-      <text x="326" y="264" fill="#9bc1cf" fontSize="12" textAnchor="middle" transform="rotate(-82 326 264)" letterSpacing="5">{lang === "az" ? "XƏZƏR DƏNİZİ" : "CASPIAN SEA"}</text>
-      <g fill="#85a9bb" fontSize="11"><text x="170" y="205">{c.countries[0]}</text><text x="434" y="202">{c.countries[1]}</text><text x="362" y="37">{c.countries[2]}</text><text x="293" y="533">{c.countries[3]}</text><text x="247" y="76">{c.countries[4]}</text></g>
-      <circle cx="261" cy="294" r="3" fill="#c2dde5" /><text x="240" y="287" textAnchor="end" fill="#d2e5ed" fontSize="12">{c.baku}</text>
-      <g><motion.circle key={`ring${run}`} cx="280" cy="318" r="21" stroke="#70d1c2" fill="#70d1c2" fillOpacity=".1" initial={{ opacity: 0, scale: .4 }} animate={{ opacity: 1, scale: 1 }} transition={reduced ? INSTANT : { delay: 2.4, duration: .8 }} style={{ transformOrigin: "280px 318px" }} /><circle cx="280" cy="318" r="5" fill="#a5edda" /><path d="M280 340L280 378 186 407" stroke="#70d1c2" strokeOpacity=".65" fill="none" strokeDasharray="3 4" /></g>
-      <g fill="#678d9f" fontSize="10"><text x="18" y="30">46° N</text><text x="18" y="535">36° N</text><text x="536" y="535">54° E</text><text x="18" y="553">48° E</text></g>
-    </svg>
-    <motion.div key={`event${run}`} className={styles.scanEvent} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={reduced ? INSTANT : { delay: 2.8, duration: .6 }}><span className={styles.eventIcon}><Eye size={19} aria-hidden="true" /></span><div><strong>{c.event}</strong><span>{c.review}</span></div><ChevronRight size={17} aria-hidden="true" /></motion.div>
-    {!compact && <><div className={styles.sceneStages}><span><Check size={13} aria-hidden="true" />{c.scan}</span><span><Check size={13} aria-hidden="true" />{c.detected}</span><span className={styles.stageActive}><ShieldCheck size={13} aria-hidden="true" />{c.human}</span></div><div className={styles.sceneFooter}><span>{c.simulated}</span><button type="button" onClick={() => setRun((value) => value + 1)} aria-label={c.replay}><RotateCcw size={14} aria-hidden="true" /></button></div></>}
+  return <div className={styles.preview}>
+    <div className={styles.previewTop}><Brand variant="compact" /><span>{c.preview}</span></div>
+    <div className={styles.previewBody}>
+      <div className={styles.previewMap}>
+        <div className={styles.mapHeading}><span><Waves size={15} aria-hidden="true" />{c.monitor}</span><span>Sentinel-1 SAR</span></div>
+        <svg viewBox="0 0 700 440" role="img" aria-label={c.mapLabel}>
+          <g className={styles.mapGrid} fill="none" strokeWidth="1"><path d="M0 80H700M0 160H700M0 240H700M0 320H700M0 400H700M100 0V440M200 0V440M300 0V440M400 0V440M500 0V440M600 0V440" /></g>
+          <g className={styles.mapContours} fill="none"><path d="M-20 57Q124 147 256 89M-20 91Q124 181 254 124M-20 329Q125 270 217 307T306 338M-20 361Q125 302 217 339T306 370M474 75Q561 162 722 106M461 110Q561 197 722 141M457 326Q580 246 722 295M457 359Q580 279 722 328" /></g>
+          <path className={styles.mapSea} d="M345 27C367 17 398 25 405 48L432 44 446 66 426 88 440 115 418 136 432 155 414 178 411 202 393 227 394 253 376 276 387 297 379 324 389 346 377 378 359 399 337 414 308 407 283 414 261 394 263 367 277 342 272 317 284 289 279 265 291 241 286 219 302 190 296 167 313 145 305 124 312 100 296 87 304 64 326 62 328 39Z" />
+          <g className={styles.mapSeaLines} fill="none"><path d="M316 95C394 83 416 103 432 128M299 162C363 149 397 171 415 195M281 250C326 229 375 239 394 263M273 329C308 302 359 315 381 341" /></g>
+          <text x="353" y="258" textAnchor="middle" className={styles.mapSeaName} transform="rotate(-80 353 258)">{c.sea}</text>
+          <circle cx="281" cy="247" r="4" fill="#FBF9F0" /><text x="263" y="244" textAnchor="end" className={styles.mapCity}>{c.baku}</text>
+          <g className={styles.mapSignal}><circle cx="299" cy="264" r="20" /><circle cx="299" cy="264" r="6" /><circle cx="284" cy="306" r="16" /><circle cx="284" cy="306" r="5" /></g>
+          <path d="M299 283V344H468" className={styles.mapCalloutLine} fill="none" strokeDasharray="4 5" />
+          <g className={styles.mapCoordinates}><text x="20" y="30">46° N</text><text x="20" y="420">36° N</text><text x="636" y="420">54° E</text></g>
+        </svg>
+        <div className={styles.mapLegend}><span /><span>{c.event}</span><ShieldCheck size={14} aria-hidden="true" /></div>
+      </div>
+      <div className={styles.previewQueue}>
+        <div className={styles.queueHeading}><h3>{c.queue}</h3><span>2</span></div>
+        <div className={styles.queueItem}><div><span className={styles.queueDot} /><strong>{c.sangachal}</strong><ChevronRight size={14} aria-hidden="true" /></div><p>{c.pending}</p><span className={styles.reviewBadge}><ShieldCheck size={12} aria-hidden="true" />{c.humanTag}</span></div>
+        <div className={styles.queueItem}><div><span className={styles.queueDot} /><strong>{c.corridor}</strong><ChevronRight size={14} aria-hidden="true" /></div><p>{c.review}</p></div>
+        <div className={styles.previewContext}><Waves size={19} aria-hidden="true" /><div><strong>{c.context}</strong><span>{c.observation}</span></div></div>
+        <div className={styles.previewSource}><Satellite size={15} aria-hidden="true" /><span>{c.source}</span></div>
+      </div>
+    </div>
   </div>;
 }
 
@@ -81,36 +84,88 @@ export default function LandingPage() {
   const { lang, t } = useLanguage();
   const { acceptUser } = useSession();
   const c = copy[lang];
-  const reduced = useReducedMotionSafe();
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (!menu) return;
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(false); };
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setMenu(false); menuButtonRef.current?.focus(); }
+    };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [menu]);
+
   const openDemo = async () => {
     if (busy) return;
-    setError(null); setBusy(true);
-    const result = await loginAsDemo();
-    if (result.ok) { acceptUser(result.user); router.push("/dashboard"); }
-    else { setError(t.auth.demoFailed); setBusy(false); }
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await loginAsDemo();
+      if (result.ok) { acceptUser(result.user); router.push("/dashboard"); return; }
+      setError(t.auth.demoFailed);
+    } catch { setError(t.auth.demoFailed); }
+    setBusy(false);
   };
-  const demoButton = <button type="button" className={styles.primary} onClick={openDemo} disabled={busy} aria-busy={busy}>{busy ? <LoaderCircle className="spinner" size={18} aria-hidden="true" /> : <Play size={16} fill="currentColor" aria-hidden="true" />}{busy ? c.loading : t.landing.continueAsGuest}<ArrowRight size={18} aria-hidden="true" /></button>;
-  const reveal = { initial: { opacity: 0, y: 20 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: .15 }, transition: reduced ? INSTANT : { duration: .55 } };
+
+  const demoButton = <button type="button" className={styles.primary} onClick={openDemo} disabled={busy} aria-busy={busy} aria-describedby={error ? "landing-demo-error" : undefined}>{busy ? <LoaderCircle className="spinner" size={18} aria-hidden="true" /> : null}<span>{busy ? c.loading : t.landing.continueAsGuest}</span><ArrowRight size={18} aria-hidden="true" /></button>;
+
   return <div className={styles.page}>
-    <a href="#landing-content" className="skip-link">{lang === "az" ? "Məzmuna keç" : "Skip to content"}</a>
-    <header className={styles.header}><div className={styles.navInner}><Link href="/" className={styles.brand} aria-label="SeaSentry"><Waves size={29} strokeWidth={1.5} aria-hidden="true" /><span translate="no">SeaSentry</span></Link><nav className={styles.desktopNav} aria-label={lang === "az" ? "Əsas naviqasiya" : "Main navigation"}><a href="#capabilities">{c.capabilities}</a><a href="#workflow">{c.workflow}</a><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{t.nav.about}</a></nav><div className={styles.navActions}><LanguageToggle size={40} /><ThemeToggle size={40} /><Link className={styles.signIn} href="/login">{t.nav.login}<ArrowRight size={15} aria-hidden="true" /></Link><button type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="landing-nav" aria-label={menu ? c.closeMenu : c.menu} onClick={() => setMenu(!menu)}>{menu ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}</button></div></div>{menu && <nav id="landing-nav" className={styles.mobileNav} aria-label={c.menu}><a href="#capabilities" onClick={() => setMenu(false)}>{c.capabilities}</a><a href="#workflow" onClick={() => setMenu(false)}>{c.workflow}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav>}</header>
+    <a href="#landing-content" className="skip-link">{c.skip}</a>
+    <header className={styles.header}>
+      <div className={styles.navInner}>
+        <Link href="/" className={styles.brandLink} aria-label="SeaSentry"><Brand variant="landing" /></Link>
+        <nav className={styles.desktopNav} aria-label={c.nav}><a href="#capabilities">{c.capabilities}</a><a href="#workflow">{c.workflow}</a><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{t.nav.about}</a></nav>
+        <div className={styles.navActions}><LanguageToggle size={40} /><ThemeToggle size={40} /><Link className={styles.signIn} href="/login">{t.nav.login}<ArrowRight size={15} aria-hidden="true" /></Link><button ref={menuButtonRef} type="button" className={styles.menuButton} aria-expanded={menu} aria-controls="landing-nav" aria-label={menu ? c.closeMenu : c.menu} onClick={() => setMenu(!menu)}>{menu ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}</button></div>
+      </div>
+      {menu && <nav id="landing-nav" className={styles.mobileNav} aria-label={c.nav}><a href="#capabilities" onClick={() => setMenu(false)}>{c.capabilities}</a><a href="#workflow" onClick={() => setMenu(false)}>{c.workflow}</a><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{c.about}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav>}
+    </header>
     <main id="landing-content">
-      <section className={styles.hero}><div className={styles.heroCopy}><motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={reduced ? INSTANT : undefined} className={styles.territory}><span />{c.territory}</motion.div><motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={reduced ? INSTANT : { duration: .65 }}>{c.headline[0]}<br />{c.headline[1]}</motion.h1><p className={styles.heroSub}>{c.subtitle}</p><div className={styles.heroActions}>{demoButton}<a className={styles.secondary} href="#workflow">{c.workflow}<ArrowDown size={16} aria-hidden="true" /></a></div><p className={styles.demoNote}>{c.demoNote}</p>{error && <p className={styles.demoError} role="alert">{error}</p>}<div className={styles.humanPromise}><ShieldCheck size={20} strokeWidth={1.6} aria-hidden="true" /><span>{c.humanNote}</span></div></div><CaspianScene /></section>
-      <div className={styles.signalStrip}><span><Satellite size={18} aria-hidden="true" />Sentinel-1 SAR</span><span><Brain size={18} aria-hidden="true" />{lang === "az" ? "Sübut əsaslı analiz" : "Evidence-led analysis"}</span><span><ShieldCheck size={18} aria-hidden="true" />{lang === "az" ? "İnsan nəzarəti" : "Human oversight"}</span><span><Droplets size={18} aria-hidden="true" />{lang === "az" ? "Cavab tədbiri" : "Response planning"}</span></div>
-      <section id="capabilities" className={styles.section}><motion.div {...reveal} className={styles.sectionHeading}><h2>{c.signal}</h2><p>{c.signalBody}</p></motion.div><div className={styles.features}><motion.article {...reveal} className={`${styles.feature} ${styles.featureEvidence}`}><div className={styles.featureTop}><Satellite size={25} strokeWidth={1.5} aria-hidden="true" /><span>{c.satelliteTag}</span></div><div className={styles.radarIllustration} aria-hidden="true"><div /><div /><div /><span /><i /></div><h3>{c.satelliteTitle}</h3><p>{c.satelliteBody}</p></motion.article><motion.article {...reveal} className={`${styles.feature} ${styles.featureHuman}`}><div className={styles.featureTop}><ShieldCheck size={25} strokeWidth={1.5} aria-hidden="true" /><span>{c.humanTag}</span></div><div className={styles.reviewIllustration}><span><Eye size={19} aria-hidden="true" />{c.review}</span><div><Check size={17} aria-hidden="true" />{lang === "az" ? "Yoxla və qərar ver" : "Review, then decide"}</div></div><h3>{c.humanTitle}</h3><p>{c.humanBody}</p></motion.article><motion.article {...reveal} className={`${styles.feature} ${styles.featureResponse}`}><div className={styles.featureTop}><Droplets size={25} strokeWidth={1.5} aria-hidden="true" /><span>{c.responseTag}</span></div><div><h3>{c.responseTitle}</h3><p>{c.responseBody}</p></div><ArrowRight size={24} strokeWidth={1.5} aria-hidden="true" /></motion.article></div></section>
-      <section id="workflow" className={`${styles.section} ${styles.workflow}`}><motion.div {...reveal} className={styles.sectionHeading}><h2>{c.stagesTitle}</h2><p>{c.stagesBody}</p></motion.div><ol className={styles.steps}>{c.stages.map(([title, body], index) => { const Icon = [Satellite, Brain, ShieldCheck, Droplets][index]; return <motion.li key={title} {...reveal}><div className={styles.stepTop}><span>{String(index + 1).padStart(2, "0")}</span><Icon size={23} strokeWidth={1.5} aria-hidden="true" /></div><h3>{title}</h3><p>{body}</p></motion.li>; })}</ol></section>
-      <section className={`${styles.section} ${styles.workspace}`}><motion.div {...reveal} className={styles.workspaceCopy}><h2>{c.workspaceTitle}</h2><p>{c.workspaceBody}</p><button type="button" className={styles.workspaceLink} disabled={busy} onClick={openDemo}>{c.explore}<ArrowRight size={18} aria-hidden="true" /></button></motion.div><motion.div {...reveal} className={styles.preview}><div className={styles.previewTop}><Waves size={18} aria-hidden="true" /><strong>SeaSentry</strong><span>{c.preview}</span></div><div className={styles.previewBody}><div className={styles.previewMap}><CaspianScene compact /></div><div className={styles.previewQueue}><h3>{c.queue}</h3><div><span className={styles.queueDot} /><strong>Sangachal coast</strong><p>{c.pending}</p></div><div><span className={styles.queueDot} /><strong>Baku corridor</strong><p>{c.review}</p></div><div className={styles.previewWeather}><Waves size={20} aria-hidden="true" /><span>{lang === "az" ? "Yerli şərait və mənbə vaxtı" : "Local conditions & observation time"}</span></div></div></div></motion.div></section>
-      <section className={styles.finalCta}><div><span className={styles.finalIcon}><Waves size={32} strokeWidth={1.5} aria-hidden="true" /></span><h2>{c.ready}</h2><p>{c.readyBody}</p>{demoButton}<Link className={styles.registerLink} href="/register">{t.auth.createAccount}<ArrowRight size={15} aria-hidden="true" /></Link>{error && <p className={styles.demoError} role="alert">{error}</p>}</div></section>
+      <section className={styles.hero}>
+        <div className={styles.heroInner}>
+          <div className={styles.heroCopy}>
+            <p className={styles.territory}><span />{c.territory}</p>
+            <h1>{c.headline[0]}<br />{c.headline[1]}</h1>
+            <p className={styles.heroSub}>{c.subtitle}</p>
+            <div className={styles.heroActions}>{demoButton}<a className={styles.secondary} href="#workflow">{c.workflow}<ArrowDown size={16} aria-hidden="true" /></a></div>
+            <p className={styles.demoNote}>{c.demoNote}</p>
+            {error && <p id="landing-demo-error" className={styles.demoError} role="alert">{error}</p>}
+            <div className={styles.humanPromise}><ShieldCheck size={20} strokeWidth={1.6} aria-hidden="true" /><span>{c.humanNote}</span></div>
+          </div>
+          <SatelliteScene lang={lang} />
+        </div>
+        <div className={styles.signalStrip}><span><Satellite size={18} aria-hidden="true" />Sentinel-1 SAR</span><span><Brain size={18} aria-hidden="true" />{lang === "az" ? "Sübut əsaslı təhlil" : "Evidence-led analysis"}</span><span><ShieldCheck size={18} aria-hidden="true" />{lang === "az" ? "İnsan nəzarəti" : "Human oversight"}</span><span><Droplets size={18} aria-hidden="true" />{c.responseTag}</span></div>
+      </section>
+
+      <section id="capabilities" className={styles.section}>
+        <div className={styles.sectionHeading}><h2>{c.signal}</h2><p>{c.signalBody}</p></div>
+        <div className={styles.features}>
+          <article className={styles.evidenceFeature}>
+            <div className={styles.featureTag}><Satellite size={18} aria-hidden="true" />{c.satelliteTag}</div>
+            <div className={styles.evidenceVisual} aria-hidden="true"><div className={styles.radarImage}><span className={styles.radarCoast} /><i /><span className={styles.imageCaption}>{c.original}</span></div><div className={`${styles.radarImage} ${styles.radarOverlay}`}><span className={styles.radarCoast} /><i /><span className={styles.detectionOutline} /><span className={styles.imageCaption}>{c.overlay}</span></div><div className={styles.compareIcon}><ArrowRight size={18} /></div></div>
+            <h3>{c.satelliteTitle}</h3><p>{c.satelliteBody}</p>
+          </article>
+          <div className={styles.decisionFeatures}>
+            <article className={styles.humanFeature}><div className={styles.featureTag}><ShieldCheck size={18} aria-hidden="true" />{c.humanTag}</div><h3>{c.humanTitle}</h3><p>{c.humanBody}</p><div className={styles.reviewIllustration}><span><Eye size={17} aria-hidden="true" />{c.review}</span><Check size={17} aria-hidden="true" /></div></article>
+            <article className={styles.responseFeature}><div className={styles.featureTag}><FileCheck2 size={18} aria-hidden="true" />{c.responseTag}</div><h3>{c.responseTitle}</h3><p>{c.responseBody}</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow" className={`${styles.section} ${styles.workflow}`}>
+        <div className={styles.sectionHeading}><h2>{c.stagesTitle}</h2><p>{c.stagesBody}</p></div>
+        <ol className={styles.steps}>{c.stages.map(([title, body], index) => { const Icon = [Satellite, Brain, ShieldCheck, Droplets][index]; return <li key={title}><div className={styles.stepTop}><span>{String(index + 1).padStart(2, "0")}</span><Icon size={25} strokeWidth={1.5} aria-hidden="true" /></div><h3>{title}</h3><p>{body}</p></li>; })}</ol>
+      </section>
+
+      <section className={`${styles.section} ${styles.workspace}`}>
+        <div className={styles.workspaceHeading}><div><h2>{c.workspaceTitle}</h2><p>{c.workspaceBody}</p></div><button type="button" className={styles.workspaceLink} disabled={busy} onClick={openDemo}>{c.explore}<ArrowRight size={18} aria-hidden="true" /></button></div>
+        <WorkspacePreview lang={lang} />
+      </section>
+
+      <section className={styles.finalCta}><div className={styles.finalCtaInner}><div><p className={styles.finalPromise}><ShieldCheck size={17} aria-hidden="true" />{c.humanNote}</p><h2>{c.ready}</h2><p className={styles.finalBody}>{c.readyBody}</p></div><div className={styles.finalActions}>{demoButton}<Link className={styles.registerLink} href="/register">{t.auth.createAccount}<ArrowRight size={15} aria-hidden="true" /></Link></div></div></section>
     </main>
-    <footer className={styles.footer}><div><Link href="/" className={styles.footerBrand} translate="no">SeaSentry</Link><p>{c.footer}</p></div><nav aria-label={lang === "az" ? "Alt naviqasiya" : "Footer navigation"}><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{c.about}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav></footer>
+    <footer className={styles.footer}><div><Link href="/" className={styles.footerBrand} aria-label="SeaSentry"><Brand variant="default" /></Link><p>{c.footer}</p></div><nav aria-label={c.footerNav}><a href="https://seasentryinfo.vercel.app" target="_blank" rel="noreferrer">{c.about}</a><Link href="/login">{t.nav.login}</Link><Link href="/register">{t.nav.register}</Link></nav></footer>
   </div>;
 }

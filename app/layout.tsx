@@ -18,7 +18,13 @@ const plex = localFont({
   display: "swap",
 });
 
+// Absolute base for Open Graph image URLs: the Vercel production domain when deployed, localhost otherwise.
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "SeaSentry — Satellite & AI Oil Spill Intelligence",
   description:
     "SeaSentry detects potential oil spills on the Caspian Sea using satellite SAR imagery, analyzes them with AI, and supports human review, response, and cleanup.",

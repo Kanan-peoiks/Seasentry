@@ -88,6 +88,10 @@ one workspace.
 - **Dashboard** — live Caspian Sea map (Leaflet/OpenStreetMap), KPI cards,
   recent incidents, an activity feed, and a real-time sea/weather widget
   (Open-Meteo, no API key required).
+- **Base maps** — the map's Layers menu switches between the street map,
+  an Esri World Imagery satellite mosaic and NASA GIBS daily Terra MODIS
+  true colour (the latest complete day, UTC). The choice is remembered per
+  browser; attribution follows the active layer.
 - **Live incident simulation** — a demo-only trigger (client-side, never
   persisted) that drops a simulated fresh detection onto the map to narrate
   the detect → decide → respond story without waiting for a real one.

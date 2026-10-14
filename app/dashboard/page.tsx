@@ -86,7 +86,7 @@ function CoordinateForm({ onSubmit }: { onSubmit: (lat: number, lng: number) => 
 type LayerMenuProps = { layers: MapLayers; onChange: (next: MapLayers) => void; basemap: Basemap; onBasemapChange: (next: Basemap) => void };
 
 function LayerMenu({ layers, onChange, basemap, onBasemapChange }: LayerMenuProps) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -129,7 +129,7 @@ function LayerMenu({ layers, onChange, basemap, onBasemapChange }: LayerMenuProp
                 </label>
               ))}
             </div>
-            {basemap !== "map" && <small>{basemap === "satellite" ? t.mapPanel.basemapSatelliteHint : t.mapPanel.basemapModisHint(modisDate())}</small>}
+            {basemap !== "map" && <small>{basemap === "satellite" ? t.mapPanel.basemapSatelliteHint : t.mapPanel.basemapModisHint(new Date(`${modisDate()}T00:00:00Z`).toLocaleDateString(lang === "az" ? "az-AZ" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }))}</small>}
           </div>
           {items.map(([id, label, hint]) => (
             <label key={id} className="layer-option">

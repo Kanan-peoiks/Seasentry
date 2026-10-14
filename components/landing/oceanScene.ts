@@ -433,35 +433,6 @@ export function createOceanScene(canvas: HTMLCanvasElement, fontFamily: string):
       ctx.restore();
     }
 
-    // ---- scan sweep (screen space) ------------------------------------
-    const scan = smooth(0.32, 0.47, p);
-    const scanVisible = smooth(0.31, 0.35, p) * (1 - smooth(0.47, 0.52, p));
-    if (scanVisible > 0.001) {
-      const fx0 = wide ? W * 0.3 : W * 0.08;
-      const fx1 = W * 0.94;
-      const fy0 = H * 0.1;
-      const fy1 = H * 0.9;
-      const sy = lerp(fy0, fy1, scan);
-      ctx.save();
-      ctx.globalAlpha = scanVisible;
-      const trail = ctx.createLinearGradient(0, sy - 120, 0, sy);
-      trail.addColorStop(0, "rgba(0,197,200,0)");
-      trail.addColorStop(1, "rgba(0,197,200,.2)");
-      ctx.fillStyle = trail;
-      ctx.fillRect(fx0, Math.max(fy0, sy - 120), fx1 - fx0, Math.min(120, sy - fy0));
-      ctx.strokeStyle = "rgba(120,240,240,.95)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(fx0, sy); ctx.lineTo(fx1, sy); ctx.stroke();
-      // swath corners
-      ctx.strokeStyle = "rgba(220,248,250,.9)";
-      ctx.lineWidth = 2;
-      const corner = 22;
-      for (const [cx, cy, dx, dy] of [[fx0, fy0, 1, 1], [fx1, fy0, -1, 1], [fx0, fy1, 1, -1], [fx1, fy1, -1, -1]] as const) {
-        ctx.beginPath(); ctx.moveTo(cx + dx * corner, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + dy * corner); ctx.stroke();
-      }
-      ctx.restore();
-    }
-
     // ---- detection brackets + label (screen space) --------------------
     const bracket = smooth(0.5, 0.56, p) * (1 - smooth(0.7, 0.74, p));
     if (bracket > 0.001) {

@@ -432,32 +432,6 @@ export function createOceanScene(canvas: HTMLCanvasElement, fontFamily: string):
       }
       ctx.restore();
     }
-
-    // ---- detection brackets + label (screen space) --------------------
-    const bracket = smooth(0.5, 0.56, p) * (1 - smooth(0.7, 0.74, p));
-    if (bracket > 0.001) {
-      const c = toScreen(SLICK.x, SLICK.y);
-      const hw = 125 * k * shrink + 16;
-      const hh = 72 * k * shrink + 16;
-      ctx.save();
-      ctx.globalAlpha = bracket;
-      ctx.strokeStyle = "#BFF3F7";
-      ctx.lineWidth = 1.6;
-      const len = 16;
-      for (const [sx, sy2] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-        const x = c.x + sx * hw;
-        const y = c.y + sy2 * hh;
-        ctx.beginPath(); ctx.moveTo(x - sx * len, y); ctx.lineTo(x, y); ctx.lineTo(x, y - sy2 * len); ctx.stroke();
-      }
-      ctx.font = `600 12px ${fontFamily}`;
-      const label = "SPILL-DEMO · 0.87";
-      const tw = ctx.measureText(label).width + 16;
-      ctx.fillStyle = "rgba(3,35,77,.92)";
-      ctx.fillRect(c.x - hw, c.y - hh - 28, tw, 22);
-      ctx.fillStyle = "#BFF3F7";
-      ctx.fillText(label, c.x - hw + 8, c.y - hh - 12);
-      ctx.restore();
-    }
   };
 
   return { prepare, draw, resize };

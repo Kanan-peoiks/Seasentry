@@ -63,6 +63,15 @@ one workspace.
   demo account with one click (no signup) — built for exactly this: someone
   evaluating the product (a judge, a stakeholder) reaching the dashboard
   instantly.
+- **Scroll-driven landing story** (`components/landing/CinematicStory.tsx`)
+  — a three.js Earth and satellite hand off to real, openly licensed imagery:
+  a NASA MODIS view of the Caspian, a TerraSAR-X radar image of the 2009
+  Montara spill with traced detection outlines, a containment-boom photo and
+  two Copernicus Sentinel-1 passes compared with a wipe. Every scene shows
+  its credit on screen; sources and licences are listed in
+  `public/story/CREDITS.md`. Visitors with reduced motion, data saver or no
+  WebGL get the static hero instead, and a "Skip the story" link is always
+  available.
 
 ### Auth & accounts
 - Real registration/login/logout against the backend; JWT stored in an
